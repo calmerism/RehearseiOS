@@ -40,11 +40,14 @@ struct HomeView: View {
 
     private var header: some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Rehearse")
-                    .font(.app(.largeTitle, weight: .bold))
+            Image("rehearse")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(height: 30)
+                .foregroundStyle(AppTheme.ink)
+                .accessibilityLabel("Rehearse")
                 .accessibilityAddTraits(.isHeader)
-            }
             Spacer()
             demoMenu
         }

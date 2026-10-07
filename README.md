@@ -1,3 +1,5 @@
+<img src="Rehearse/Resources/rehearse.png" alt="Rehearse" width="220" />
+
 # Rehearse (iOS)
 
 An autonomous, voice-driven AI interview practice iOS application built in SwiftUI. Rehearse provides real-time verbal interview simulations tailored to your resume and technical domain, providing immediate feedback on technical correctness, trade-offs, and communication clarity.
