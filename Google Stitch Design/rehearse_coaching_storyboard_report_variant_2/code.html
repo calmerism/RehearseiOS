@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<title>Rehearse - Coaching Feedback</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          surface: "#ffffff",
+          "surface-container-low": "#fafafa",
+          "surface-container": "#f4f4f6",
+          "surface-container-high": "#e8e8ed",
+          border: "#e5e5ea",
+          "border-subtle": "#f0f0f4",
+          primary: "#cc4900",
+          "primary-action": "#f66018",
+          "on-surface": "#09090b",
+          "on-surface-muted": "#52525b",
+          "on-surface-dim": "#71717a"
+        },
+        fontFamily: {
+          sans: ["Geist", "-apple-system", "sans-serif"],
+          mono: ["JetBrains Mono", "monospace"]
+        },
+        borderRadius: {
+          DEFAULT: "0.25rem",
+          lg: "0.5rem",
+          xl: "0.75rem",
+          '2xl': "1rem",
+          '3xl': "1.25rem"
+        }
+      }
+    }
+  };
+</script>
+<style>
+  @layer base {
+    html, body {
+      width: 100vw;
+      margin: 0;
+      padding: 0;
+      background-color: #fafafa;
+    }
+    body {
+      overscroll-behavior: none;
+      min-height: max(884px, 100dvh);
+    }
+    .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom, 20px);
+    }
+    .pt-safe {
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+  }
+  ::-webkit-scrollbar {
+    display: none;
+  }
+</style>
+</head>
+<body class="bg-[#fafafa] font-sans text-zinc-800 flex flex-col min-h-screen antialiased selection:bg-orange-500/20 selection:text-orange-900 pb-28">
+<!-- Clean Header & Status -->
+<header class="fixed top-0 w-full z-40 pt-safe bg-white/90 backdrop-blur-md border-b border-zinc-200/80">
+<div class="h-14 px-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<button aria-label="Back" class="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 active:scale-95 transition-all" onclick="history.back()">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+</button>
+<div>
+<div class="flex items-center gap-2">
+<span class="text-[14px] font-semibold text-zinc-900 tracking-tight">Data Analyst L3</span>
+<span class="inline-flex items-center gap-1 text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            Passed
+          </span>
+</div>
+<p class="text-[11px] text-zinc-500">18 min mock session</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-600 hover:text-zinc-900 transition-colors">
+<span class="material-symbols-outlined text-[19px]">share</span>
+</button>
+<a class="w-9 h-9 rounded-full border border-zinc-200 p-0.5 overflow-hidden flex items-center justify-center" href="#">
+<img alt="Candidate Profile" class="w-full h-full object-cover rounded-full grayscale contrast-125" src="https://lh3.googleusercontent.com/aida/AEtjO1W36gOrKAR2Ou9ZYu7MXu9wg2rajiEb8E-8_iNDu9GWNi7k8l1-JSHVKXqbjqVwPwg81RCGyRDjDSQ__eW2oAwvCGOSFtCwcgYQfMlnzgguq1TpLUYyopudFK-QGH960CTpfg7CzDl7pMRFhe9EIquJXICC0EV8A8JoOCfANmo0M09YwvJ3sqMQ4I3zcrc2wogfo73uh4vFQw5gGelh15DXVxfseEvPWBTkCKT6FzJQCIkSZ98tiKA-26bD"/>
+</a>
+</div>
+</div>
+</header>
+<main class="flex-1 flex flex-col relative w-full pt-16">
+<div class="flex flex-col w-full px-4 py-4 space-y-4 max-w-lg mx-auto">
+<!-- Hero Visual Result Card -->
+<section class="bg-white border border-zinc-200/90 rounded-2xl p-5 shadow-sm">
+<div class="flex items-center justify-between gap-4">
+<div>
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-100 mb-2">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>+7% vs baseline</span>
+</div>
+<h2 class="text-2xl font-bold text-zinc-900 tracking-tight">Strong Match</h2>
+<p class="text-[13px] text-zinc-500 mt-0.5">Top 12% in technical framing</p>
+</div>
+<!-- Readiness Circular Gauge -->
+<div class="relative w-20 h-20 shrink-0 flex items-center justify-center">
+<svg class="w-full h-full -rotate-90" viewbox="0 0 36 36">
+<path class="text-zinc-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3.2"></path>
+<path class="text-[#f66018]" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="81, 100" stroke-linecap="round" stroke-width="3.2"></path>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-xl font-bold font-mono text-zinc-900 leading-none">81%</span>
+<span class="text-[9px] uppercase tracking-wider text-zinc-400 font-medium mt-0.5">Ready</span>
+</div>
+</div>
+</div>
+<!-- 3 Lightweight Dimension Pills -->
+<div class="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-zinc-100">
+<div class="bg-zinc-50 rounded-xl p-2.5 text-center border border-zinc-100">
+<span class="text-[10px] uppercase font-semibold tracking-wider text-zinc-400 block mb-1">Tech</span>
+<span class="font-mono text-base font-bold text-zinc-900">84%</span>
+<div class="w-full bg-zinc-200 h-1 rounded-full mt-1.5 overflow-hidden">
+<div class="bg-zinc-800 h-full rounded-full" style="width: 84%"></div>
+</div>
+</div>
+<div class="bg-zinc-50 rounded-xl p-2.5 text-center border border-zinc-100">
+<span class="text-[10px] uppercase font-semibold tracking-wider text-zinc-400 block mb-1">Structure</span>
+<span class="font-mono text-base font-bold text-zinc-900">82%</span>
+<div class="w-full bg-zinc-200 h-1 rounded-full mt-1.5 overflow-hidden">
+<div class="bg-zinc-800 h-full rounded-full" style="width: 82%"></div>
+</div>
+</div>
+<div class="bg-orange-50/50 rounded-xl p-2.5 text-center border border-orange-100">
+<span class="text-[10px] uppercase font-semibold tracking-wider text-orange-700/80 block mb-1">Brevity</span>
+<span class="font-mono text-base font-bold text-[#cc4900]">72%</span>
+<div class="w-full bg-orange-200/70 h-1 rounded-full mt-1.5 overflow-hidden">
+<div class="bg-[#f66018] h-full rounded-full" style="width: 72%"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Priority Coaching Drill Card -->
+<section class="bg-gradient-to-b from-orange-50/60 to-white border border-orange-200/80 rounded-2xl p-5 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<div class="flex items-center gap-2">
+<span class="flex h-2 w-2 rounded-full bg-[#f66018]"></span>
+<span class="text-[11px] font-semibold text-orange-800 tracking-wide uppercase">Top Growth Priority</span>
+</div>
+<span class="text-[11px] font-mono text-zinc-500">Q3 Tangent</span>
+</div>
+<h3 class="text-base font-semibold text-zinc-900 mb-1.5">Tighten Response Length</h3>
+<p class="text-[13px] text-zinc-600 leading-relaxed mb-4">
+        You spent 75s on SQL architecture before stating the result. Flip to BLUF (Bottom Line Up Front) to sound more senior.
+      </p>
+<!-- Visual Benchmark -->
+<div class="bg-white/80 rounded-xl p-3 border border-orange-100 flex items-center justify-between mb-4">
+<div>
+<span class="text-[11px] text-zinc-500 block">Your Response</span>
+<span class="text-[14px] font-mono font-semibold text-[#ba1a1a]">120s</span>
+</div>
+<div class="flex items-center gap-1.5 text-zinc-400">
+<span class="text-xs">➔</span>
+</div>
+<div class="text-right">
+<span class="text-[11px] text-zinc-500 block">Recommended</span>
+<span class="text-[14px] font-mono font-semibold text-emerald-600">75s</span>
+</div>
+</div>
+<button class="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#f66018] hover:bg-[#e05312] text-white text-[13px] font-semibold transition-all shadow-sm active:scale-[0.99]">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+<span>Practice 2-Minute BLUF Drill</span>
+</button>
+</section>
+<!-- Interactive Question Performance Breakdown -->
+<section class="space-y-2.5">
+<div class="flex items-center justify-between px-1">
+<h3 class="text-[13px] font-semibold text-zinc-900">Question Performance</h3>
+<span class="text-[11px] text-zinc-400 font-mono">3 Responses</span>
+</div>
+<!-- Q1 Card (Interactive Accordion) -->
+<details class="group bg-white border border-zinc-200/90 rounded-2xl overflow-hidden shadow-sm transition-all" open="">
+<summary class="list-none cursor-pointer p-4 flex items-center justify-between select-none">
+<div class="flex items-start gap-3 min-w-0">
+<span class="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-mono text-[11px] font-semibold flex items-center justify-center shrink-0 mt-0.5">
+              1
+            </span>
+<div class="min-w-0">
+<div class="flex items-center gap-2">
+<span class="text-[13px] font-semibold text-zinc-900 truncate">Handling missing ETL values</span>
+<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">1m 22s</span>
+</div>
+<p class="text-[12px] text-zinc-500 mt-0.5">Null coalescing &amp; partitioned joins</p>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-mono text-[13px] font-bold text-emerald-600">88%</span>
+<span class="material-symbols-outlined text-zinc-400 group-open:rotate-180 transition-transform text-[18px]">expand_more</span>
+</div>
+</summary>
+<div class="px-4 pb-4 pt-1 border-t border-zinc-100 bg-zinc-50/50 space-y-3">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700">SQL Edge Cases</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">Star Framework</span>
+</div>
+<p class="text-[12px] text-zinc-600 leading-relaxed">
+            "Solid delivery on partitioning strategy. You answered directly and stayed concise."
+          </p>
+<div class="flex items-center justify-between pt-1">
+<button class="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-2xs">
+<span class="material-symbols-outlined text-[15px] text-[#f66018]">play_circle</span>
+              Hear Feedback Audio
+            </button>
+<span class="text-[10px] font-mono text-zinc-400">Recorded 0:34</span>
+</div>
+</div>
+</details>
+<!-- Q2 Card -->
+<details class="group bg-white border border-zinc-200/90 rounded-2xl overflow-hidden shadow-sm transition-all">
+<summary class="list-none cursor-pointer p-4 flex items-center justify-between select-none">
+<div class="flex items-start gap-3 min-w-0">
+<span class="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-mono text-[11px] font-semibold flex items-center justify-center shrink-0 mt-0.5">
+              2
+            </span>
+<div class="min-w-0">
+<div class="flex items-center gap-2">
+<span class="text-[13px] font-semibold text-zinc-900 truncate">Query index resolution</span>
+<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600">1m 58s</span>
+</div>
+<p class="text-[12px] text-zinc-500 mt-0.5">Covering indexes and explain plans</p>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-mono text-[13px] font-bold text-zinc-900">84%</span>
+<span class="material-symbols-outlined text-zinc-400 group-open:rotate-180 transition-transform text-[18px]">expand_more</span>
+</div>
+</summary>
+<div class="px-4 pb-4 pt-1 border-t border-zinc-100 bg-zinc-50/50 space-y-3">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700">Optimization</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700">PostgreSQL</span>
+</div>
+<p class="text-[12px] text-zinc-600 leading-relaxed">
+            Good structural breakdown of scan patterns vs index seeks.
+          </p>
+<div class="flex items-center justify-between pt-1">
+<button class="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-2xs">
+<span class="material-symbols-outlined text-[15px] text-[#f66018]">play_circle</span>
+              Hear Feedback Audio
+            </button>
+<span class="text-[10px] font-mono text-zinc-400">Recorded 0:28</span>
+</div>
+</div>
+</details>
+<!-- Q3 Card -->
+<details class="group bg-white border border-zinc-200/90 rounded-2xl overflow-hidden shadow-sm transition-all">
+<summary class="list-none cursor-pointer p-4 flex items-center justify-between select-none">
+<div class="flex items-start gap-3 min-w-0">
+<span class="w-6 h-6 rounded-full bg-orange-50 border border-orange-200 text-orange-700 font-mono text-[11px] font-semibold flex items-center justify-center shrink-0 mt-0.5">
+              3
+            </span>
+<div class="min-w-0">
+<div class="flex items-center gap-2">
+<span class="text-[13px] font-semibold text-zinc-900 truncate">Communicating to Leadership</span>
+<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">+75s over</span>
+</div>
+<p class="text-[12px] text-zinc-500 mt-0.5">Executive translation challenge</p>
+</div>
+</div>
+<div class="flex items-center gap-3 shrink-0">
+<span class="font-mono text-[13px] font-bold text-orange-600">71%</span>
+<span class="material-symbols-outlined text-zinc-400 group-open:rotate-180 transition-transform text-[18px]">expand_more</span>
+</div>
+</summary>
+<div class="px-4 pb-4 pt-1 border-t border-zinc-100 bg-zinc-50/50 space-y-3">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800">Needs BLUF</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700">Stakeholders</span>
+</div>
+<p class="text-[12px] text-zinc-600 leading-relaxed">
+            Content was accurate, but buried under initial setup detail. Lead with the business impact number.
+          </p>
+<div class="flex items-center justify-between pt-1">
+<button class="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 px-3 py-1.5 rounded-lg active:scale-95 transition-all shadow-2xs">
+<span class="material-symbols-outlined text-[15px] text-[#f66018]">play_circle</span>
+              Hear Feedback Audio
+            </button>
+<span class="text-[10px] font-mono text-zinc-400">Recorded 0:42</span>
+</div>
+</div>
+</details>
+</section>
+</div>
+</main>
+<!-- Sticky Retake / Next Action Dock -->
+<footer class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-zinc-200 pb-safe">
+<div class="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
+<button class="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 text-[13px] font-semibold transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined text-[18px] text-zinc-500">replay</span>
+<span>Retake Interview</span>
+</button>
+<button class="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[13px] font-semibold transition-all shadow-sm active:scale-[0.98]">
+<span>Next Drill</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</footer>
+</body></html>

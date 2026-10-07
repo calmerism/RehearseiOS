@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en" style=""><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<title>Technical Evaluation · Senior Data Scientist</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container-lowest": "#0e0e10",
+            "surface-container-low": "#1c1b1d",
+            "surface-container": "#201f22",
+            "surface-container-high": "#2a2a2c",
+            "surface-container-highest": "#353437",
+            surface: "#131315",
+            background: "#131315",
+            "on-surface": "#e5e1e4",
+            "on-surface-variant": "#e2bfb2",
+            outline: "#a98a7e",
+            "outline-variant": "#5a4138",
+            primary: "#ffb599",
+            "primary-container": "#f66018",
+            "on-primary-container": "#4f1700",
+            tertiary: "#ffb77d"
+          },
+          fontFamily: {
+            sans: ["Geist", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    @layer base {
+      html, body {
+        width: 100vw;
+        margin: 0;
+        padding: 0;
+        background-color: #131315;
+        color: #e5e1e4;
+        font-family: 'Geist', sans-serif;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+      .pb-safe {
+        padding-bottom: max(1rem, env(safe-area-inset-bottom, 16px));
+      }
+      .pt-safe {
+        padding-top: max(0.6rem, env(safe-area-inset-top, 14px));
+      }
+    }
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    @keyframes pulse-gentle {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.15); }
+    }
+    .animate-pulse-subtle {
+      animation: pulse-gentle 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes soundwave {
+      0%, 100% { height: 4px; }
+      50% { height: 13px; }
+    }
+    .sound-bar-1 { animation: soundwave 1.1s ease-in-out infinite; }
+    .sound-bar-2 { animation: soundwave 0.8s ease-in-out 0.2s infinite; }
+    .sound-bar-3 { animation: soundwave 1.3s ease-in-out 0.4s infinite; }
+    .sound-bar-4 { animation: soundwave 0.9s ease-in-out 0.1s infinite; }
+  </style>
+</head>
+<body class="bg-[#131315] text-[#e5e1e4] min-h-screen flex flex-col antialiased selection:bg-orange-950 selection:text-orange-200">
+<!-- Minimal Top Header with Segmented Progress Bar -->
+<header class="fixed top-0 inset-x-0 z-40 bg-[#131315]/90 backdrop-blur-md border-b border-[#2a2a2c] pt-safe shadow-sm">
+<div class="max-w-xl mx-auto px-4 py-2.5 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<!-- Left: Question Indicator & Micro Role Badge -->
+<div class="flex items-center gap-2.5">
+<div class="flex items-baseline gap-1">
+<span class="text-[11px] font-semibold tracking-wider uppercase text-zinc-400">Q</span>
+<span class="text-sm font-semibold text-zinc-100 font-mono tracking-tight">3<span class="text-zinc-500 font-normal text-xs">/8</span></span>
+</div>
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#1c1b1d] border border-[#353437] text-[11px] font-medium text-zinc-300">
+<span class="w-1.5 h-1.5 rounded-full bg-orange-400"></span>
+<span class="truncate max-w-[130px] sm:max-w-none">Senior Data Scientist</span>
+</span>
+</div>
+<!-- Right: Timer & Exit Button -->
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#1c1b1d] border border-[#353437] text-xs font-mono font-medium text-zinc-300">
+<span class="material-symbols-outlined text-[14px] text-zinc-400">schedule</span>
+<span class="" id="sessionTimer">14:18</span>
+</div>
+<button aria-label="Exit interview" class="w-8 h-8 flex items-center justify-center rounded-lg border border-[#353437] bg-[#1c1b1d] text-zinc-400 hover:text-zinc-100 hover:bg-[#2a2a2c] transition-colors" id="openEndModalBtn" title="Exit Session" type="button">
+<span class="material-symbols-outlined text-[17px]">close</span>
+</button>
+</div>
+</div>
+<!-- Sleek Micro Segmented Progress Bar (3 of 8 filled) -->
+<div class="grid grid-cols-8 gap-1 w-full pt-0.5 pb-0.5">
+<div class="h-1 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(246,96,24,0.6)]"></div>
+<div class="h-1 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(246,96,24,0.6)]"></div>
+<div class="h-1 rounded-full bg-orange-500 relative overflow-hidden shadow-[0_0_8px_rgba(246,96,24,0.6)]">
+<div class="absolute inset-0 bg-white/40 animate-pulse"></div>
+</div>
+<div class="h-1 rounded-full bg-[#2a2a2c]"></div>
+<div class="h-1 rounded-full bg-[#2a2a2c]"></div>
+<div class="h-1 rounded-full bg-[#2a2a2c]"></div>
+<div class="h-1 rounded-full bg-[#2a2a2c]"></div>
+<div class="h-1 rounded-full bg-[#2a2a2c]"></div>
+</div>
+</div>
+</header>
+<!-- Main Content Viewport -->
+<main class="flex-1 flex flex-col w-full max-w-xl mx-auto px-4 pt-[5.25rem] pb-32 gap-3.5">
+<!-- CARD 1: Warm Executive AI Interviewer Prompt Card -->
+<section class="rounded-2xl p-4 shadow-lg relative overflow-hidden flex flex-col gap-3 text-white bg-gradient-to-br from-[#2a170f] via-[#22130c] to-[#1a0e09] border border-orange-500/30">
+<div class="absolute -right-10 -top-10 w-36 h-36 bg-orange-500/10 rounded-full blur-2xl pointer-events-none"></div>
+<div class="flex items-center justify-between relative z-10">
+<div class="flex items-center gap-2 flex-wrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/20 border border-orange-400/30 text-[11px] font-semibold text-orange-200 tracking-tight shadow-xs backdrop-blur-sm">
+<span class="material-symbols-outlined text-[13px] text-orange-400">smart_toy</span>
+<span class="">AI Examiner</span>
+</span>
+<span class="text-[11px] text-orange-200/70 font-mono font-medium tracking-tight">Data Architecture &amp; Modeling</span>
+</div>
+<button class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-orange-400/25 bg-orange-500/15 hover:bg-orange-500/25 text-orange-100 text-xs font-medium shadow-xs transition-colors backdrop-blur-sm" id="clarifyBtn" type="button">
+<div class="flex items-end gap-0.5 h-3">
+<div class="w-0.5 bg-orange-300 rounded-full sound-bar-1"></div>
+<div class="w-0.5 bg-orange-300 rounded-full sound-bar-2"></div>
+<div class="w-0.5 bg-orange-300 rounded-full sound-bar-3"></div>
+</div>
+<span class="">Replay</span>
+</button>
+</div>
+<div class="pr-1 pt-0.5 relative z-10">
+<p class="text-[15.5px] text-zinc-100 font-medium leading-relaxed tracking-[-0.01em]">
+        Explain how you would handle missing values in a customer transaction dataset where 15% of payment records have null dates.
+</p>
+</div>
+</section>
+<!-- Candidate Video Stream Preview / Floating Stage -->
+<section class="relative w-full rounded-2xl overflow-hidden bg-black border border-[#2a2a2c] shadow-lg aspect-[16/10] sm:aspect-video ring-1 ring-white/5">
+<img alt="Candidate live feed" class="w-full h-full object-cover object-center brightness-[0.92] contrast-[1.05]" src="https://lh3.googleusercontent.com/aida/AEtjO1W36gOrKAR2Ou9ZYu7MXu9wg2rajiEb8E-8_iNDu9GWNi7k8l1-JSHVKXqbjqVwPwg81RCGyRDjDSQ__eW2oAwvCGOSFtCwcgYQfMlnzgguq1TpLUYyopudFK-QGH960CTpfg7CzDl7pMRFhe9EIquJXICC0EV8A8JoOCfANmo0M09YwvJ3sqMQ4I3zcrc2wogfo73uh4vFQw5gGelh15DXVxfseEvPWBTkCKT6FzJQCIkSZ98tiKA-26bD"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#0e0e10]/80 via-transparent to-[#0e0e10]/40 pointer-events-none"></div>
+<!-- Top HUD: HD Cam Live & Volume Bar -->
+<div class="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0e0e10]/80 backdrop-blur-md border border-white/10 text-[11px] text-zinc-200 font-mono shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+<span class="">HD Live</span>
+</div>
+<!-- Speech Input Volume Indicator -->
+<div class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0e0e10]/80 backdrop-blur-md border border-white/10 text-[11px] text-zinc-200">
+<span class="material-symbols-outlined text-[13px] text-emerald-400">mic</span>
+<div class="flex items-end gap-[2px] h-3">
+<div class="w-1 rounded-full bg-emerald-400 h-2"></div>
+<div class="w-1 rounded-full bg-emerald-400 h-3"></div>
+<div class="w-1 rounded-full bg-emerald-400 h-1.5"></div>
+<div class="w-1 rounded-full bg-emerald-400 h-2.5"></div>
+</div>
+</div>
+</div>
+<!-- Bottom unobtrusive recording timer with max limit pill -->
+<div class="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0e0e10]/80 backdrop-blur-md border border-white/10 text-[11px] text-zinc-200 font-mono shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse-subtle"></span>
+<span class="font-semibold text-orange-300" id="responseDuration">01:12</span>
+<span class="text-zinc-500">/ 02:00</span>
+</div>
+</section>
+<!-- CARD 2: Cool Studio Slate Live Speech Transcription Card -->
+<section class="rounded-2xl p-4 bg-[#1c1b1d] border border-[#2a2a2c] shadow-[0_4px_16px_-4px_rgba(0,0,0,0.5)] relative overflow-hidden flex flex-col gap-2.5">
+<!-- Left visual accent pill for candidate voice -->
+<div class="absolute left-0 top-3 bottom-3 w-1 bg-gradient-to-b from-orange-400 to-amber-600 rounded-r-full"></div>
+<div class="flex items-center justify-between pl-1 pb-1.5 border-b border-[#2a2a2c]">
+<div class="flex items-center gap-2">
+<!-- Active pulsing recording dot -->
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+</span>
+<span class="text-xs font-semibold text-zinc-200 tracking-tight">Your Real-time Voice Stream</span>
+</div>
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#2a2a2c] text-[10.5px] font-mono text-zinc-300 border border-[#353437]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+<span class="">Listening</span>
+</span>
+</div>
+<!-- Speech Transcript with recognized keyword highlights -->
+<div class="pl-1 text-[13.5px] text-zinc-200 leading-relaxed font-sans" id="liveTranscript">
+  “In a financial or transaction dataset, dropping rows arbitrarily could <mark class="bg-orange-500/20 text-orange-200 border border-orange-500/30 px-1 py-0.5 rounded font-medium">bias total revenue</mark> calculations. My first step is determining why payment records have <mark class="bg-orange-500/20 text-orange-200 border border-orange-500/30 px-1 py-0.5 rounded font-medium">null dates</mark>—whether these represent failed attempts, pending authorizations, or batch synchronization lags...”<span class="inline-block w-1.5 h-3.5 ml-1 bg-orange-500 rounded-[1px] align-middle animate-pulse"></span>
+</div>
+<!-- Candidate Speech Metrics Footer -->
+<div class="flex items-center justify-between pt-1 border-t border-[#2a2a2c] pl-1 text-[11px] font-mono text-zinc-400">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-zinc-500">text_fields</span>
+<span class="text-zinc-300">72 words</span>
+</span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-zinc-500">speed</span>
+<span class="text-zinc-300">118 WPM</span>
+</span>
+<span class="flex items-center gap-1 text-emerald-400 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+<span class="">Pacing: Optimal</span>
+</span>
+</div>
+</section>
+</main>
+<!-- Bottom Action Bar: Elevated Duo-Tone Control Dock -->
+<div class="fixed bottom-0 inset-x-0 z-40 pb-safe bg-gradient-to-t from-[#0e0e10] via-[#131315]/95 to-transparent pt-4 pointer-events-none">
+<div class="max-w-xl mx-auto px-4 pointer-events-auto">
+<div class="p-2 rounded-2xl bg-[#1c1b1d]/95 backdrop-blur-md border border-[#2a2a2c] shadow-[0_12px_32px_rgba(0,0,0,0.6)] flex items-center gap-2">
+<!-- Microphone Mute Toggle -->
+<button aria-label="Toggle Microphone" class="w-11 h-11 rounded-full border border-[#353437] bg-[#201f22] hover:bg-[#2a2a2c] text-zinc-200 flex items-center justify-center transition-colors flex-shrink-0" id="toggleMicBtn" type="button">
+<span class="material-symbols-outlined text-[20px]" id="micIcon">mic</span>
+</button>
+<!-- Video Stream Toggle -->
+<button aria-label="Toggle Camera" class="w-11 h-11 rounded-full border border-[#353437] bg-[#201f22] hover:bg-[#2a2a2c] text-zinc-200 flex items-center justify-center transition-colors flex-shrink-0" id="toggleCamBtn" type="button">
+<span class="material-symbols-outlined text-[20px]" id="camIcon">videocam</span>
+</button>
+<!-- Clarification / Hint Pill Button -->
+<button aria-label="Ask Clarification" class="w-11 h-11 sm:w-auto sm:px-3 rounded-full border border-[#353437] bg-[#201f22] hover:bg-[#2a2a2c] text-zinc-200 flex items-center justify-center gap-1.5 text-xs font-medium transition-colors flex-shrink-0" id="hintBtn" type="button">
+<span class="material-symbols-outlined text-[18px] text-zinc-400">help_outline</span>
+<span class="hidden sm:inline">Clarify</span>
+</button>
+<!-- Primary CTA: Submit Answer -->
+<button class="flex-1 h-11 px-4 rounded-xl active:scale-[0.99] text-[#370e00] font-semibold text-sm tracking-wide flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(246,96,24,0.35)] transition-all bg-gradient-to-r from-orange-500 to-amber-500 hover:brightness-105" id="submitAnswerBtn" type="button"><span class="">Submit Answer</span><span class="material-symbols-outlined text-[17px]">arrow_forward</span></button>
+</div>
+</div>
+</div>
+<!-- Exit Interview Confirmation Modal -->
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 hidden" id="endSessionModal">
+<div class="w-full max-w-sm bg-[#1c1b1d] border border-[#2a2a2c] rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
+<div class="flex flex-col gap-1.5">
+<div class="w-9 h-9 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-1">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+</div>
+<h3 class="text-sm font-semibold text-zinc-100">End Interview Session?</h3>
+<p class="text-xs text-zinc-400 leading-relaxed">
+  Your evaluation will be finalized based on 3 of 8 completed questions. You will not be able to resume this session.
+</p>
+</div>
+<div class="flex flex-col gap-2 pt-1">
+<button class="w-full h-10 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-medium text-xs transition-colors" id="confirmEndBtn" type="button">
+  End &amp; View Summary
+</button>
+<button class="w-full h-10 bg-[#201f22] hover:bg-[#2a2a2c] border border-[#353437] text-zinc-300 rounded-xl font-medium text-xs transition-colors" id="cancelEndBtn" type="button">
+  Continue Interview
+</button>
+</div>
+</div>
+</div>
+<script>
+    (function() {
+      // Modal controls
+      const endModal = document.getElementById('endSessionModal');
+      const openEndBtn = document.getElementById('openEndModalBtn');
+      const cancelEndBtn = document.getElementById('cancelEndBtn');
+      const confirmEndBtn = document.getElementById('confirmEndBtn');
+
+      if (openEndBtn && endModal) {
+        openEndBtn.addEventListener('click', () => {
+          endModal.classList.remove('hidden');
+        });
+      }
+
+      if (cancelEndBtn && endModal) {
+        cancelEndBtn.addEventListener('click', () => {
+          endModal.classList.add('hidden');
+        });
+      }
+
+      if (confirmEndBtn) {
+        confirmEndBtn.addEventListener('click', () => {
+          alert('Session ended. Generating evaluation scorecard.');
+          endModal.classList.add('hidden');
+        });
+      }
+
+      // Toggle Mic
+      const toggleMicBtn = document.getElementById('toggleMicBtn');
+      const micIcon = document.getElementById('micIcon');
+      let isMicMuted = false;
+
+      if (toggleMicBtn && micIcon) {
+        toggleMicBtn.addEventListener('click', () => {
+          isMicMuted = !isMicMuted;
+          if (isMicMuted) {
+            micIcon.innerText = 'mic_off';
+            toggleMicBtn.classList.remove('text-zinc-200', 'bg-[#201f22]', 'border-[#353437]');
+            toggleMicBtn.classList.add('text-red-400', 'bg-red-950/40', 'border-red-500/40');
+          } else {
+            micIcon.innerText = 'mic';
+            toggleMicBtn.classList.remove('text-red-400', 'bg-red-950/40', 'border-red-500/40');
+            toggleMicBtn.classList.add('text-zinc-200', 'bg-[#201f22]', 'border-[#353437]');
+          }
+        });
+      }
+
+      // Toggle Camera
+      const toggleCamBtn = document.getElementById('toggleCamBtn');
+      const camIcon = document.getElementById('camIcon');
+      let isCamOff = false;
+
+      if (toggleCamBtn && camIcon) {
+        toggleCamBtn.addEventListener('click', () => {
+          isCamOff = !isCamOff;
+          if (isCamOff) {
+            camIcon.innerText = 'videocam_off';
+            toggleCamBtn.classList.remove('text-zinc-200', 'bg-[#201f22]', 'border-[#353437]');
+            toggleCamBtn.classList.add('text-red-400', 'bg-red-950/40', 'border-red-500/40');
+          } else {
+            camIcon.innerText = 'videocam';
+            toggleCamBtn.classList.remove('text-red-400', 'bg-red-950/40', 'border-red-500/40');
+            toggleCamBtn.classList.add('text-zinc-200', 'bg-[#201f22]', 'border-[#353437]');
+          }
+        });
+      }
+
+      // Replay Audio trigger
+      const clarifyBtn = document.getElementById('clarifyBtn');
+      if (clarifyBtn) {
+        clarifyBtn.addEventListener('click', () => {
+          clarifyBtn.innerHTML = '<span class="material-symbols-outlined text-[13px] animate-spin">sync</span><span>Replaying...</span>';
+          setTimeout(() => {
+            clarifyBtn.innerHTML = '<div class="flex items-end gap-0.5 h-3"><div class="w-0.5 bg-orange-300 rounded-full sound-bar-1"></div><div class="w-0.5 bg-orange-300 rounded-full sound-bar-2"></div><div class="w-0.5 bg-orange-300 rounded-full sound-bar-3"></div></div><span>Replay</span>';
+          }, 1400);
+        });
+      }
+
+      // Clarify / Hint Button trigger
+      const hintBtn = document.getElementById('hintBtn');
+      if (hintBtn) {
+        hintBtn.addEventListener('click', () => {
+          alert('Hint request sent to interviewer: "Could you specify if transactions are real-time stream or batch?"');
+        });
+      }
+
+      // Submit answer trigger
+      const submitAnswerBtn = document.getElementById('submitAnswerBtn');
+      if (submitAnswerBtn) {
+        submitAnswerBtn.addEventListener('click', () => {
+          submitAnswerBtn.innerHTML = '<span>Submitting...</span>';
+          setTimeout(() => {
+            alert('Answer recorded. Advancing to Question 4 of 8.');
+            submitAnswerBtn.innerHTML = '<span>Submit Answer</span><span class="material-symbols-outlined text-[17px]">arrow_forward</span>';
+          }, 500);
+        });
+      }
+    })();
+  </script>
+</body></html>
