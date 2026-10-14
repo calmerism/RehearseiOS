@@ -1,81 +1,95 @@
-# Rehearse
+<img src="Rehearse/Resources/rehearse.png" alt="Rehearse" width="220" />
 
-An iOS app for practicing technical interviews out loud.
+Practice the interview, not just the questions.
 
-> **Project Status: Work in Progress (UI Prototype)**  
-> This repository currently contains the native iOS user interface and client architecture. It is an active work in progress and does not yet include the live speech-to-text pipeline or backend conversational engine. All interview sessions, scoring reports, and resume features currently run offline using local mock services.
+An ongoing group project built to explore and test how real-time mock interviews work on iOS.
 
----
+This repository currently contains the native iOS UI prototype and client application flows. It is an active work in progress. The live speech-to-text audio pipeline and conversational backend agent are not yet connected; all mock interview sessions, scoring breakdowns, and resume features currently run offline using local mock data and services.
 
-## What We Are Trying to Do
+Most engineering interview prep boils down to grinding LeetCode or memorizing definitions from a flashcard deck. That works fine for coding syntax tests, but it does almost nothing to prepare you for what an actual technical interview feels like.
 
-Most technical interview preparation focuses on solving algorithm puzzles on a whiteboard or memorizing flashcard definitions. In real technical interviews, senior engineers evaluate your ability to talk through complex systems, justify architectural decisions, and defend trade-offs in real time.
+When a senior engineer asks you why you chose PostgreSQL over MongoDB for an order service, or how you would handle 100x write traffic on a Friday evening, you cannot lean on a unit test runner. You have to explain your thought process out loud, justify your trade-offs, and handle follow-up scrutiny in real time.
 
-When asked why you selected PostgreSQL over MongoDB for an order service, or how your service handles database failover during peak traffic, you need to structure your answer verbally and address follow-up questions directly.
+Rehearse gives you a place to practice that verbal back-and-forth before it counts.
 
-We are building Rehearse to give engineers a realistic space to practice those conversations out loud before actual interviews. The goal is an adaptive voice-driven interviewer that listens to candidate responses, asks relevant follow-up questions based on what was said, and provides constructive feedback on technical accuracy, trade-off analysis, and communication structure.
 
----
+## How it works
 
-## Current Prototype Scope
+You speak into your iPhone microphone. Rehearse listens, evaluates your answer in real time, and responds conversationally.
 
-This repository implements the complete frontend experience in SwiftUI:
+Instead of running down a generic checklist of questions, the interviewer adapts to what you actually say:
+- Mention ACID guarantees, and it probes how your system behaves during a network partition.
+- Mention sharding, and it asks how you deal with hot partitions and cross-shard queries.
+- Mention Redis, and it asks about your cache invalidation strategy when writes spike.
 
-- **Live Interview Room**: Interactive question flow, speaking state, timer management (10, 20, or 30 minutes), and turn-by-turn answer reviews.
-- **Feedback & Scorecards**: Structured performance evaluation measuring technical accuracy, trade-off articulation, and clarity.
-- **Question Library**: Curated technical questions organized by categories, tags, and custom collections.
-- **Resume Hub**: Workflows for previewing resumes, tailoring resumes to specific job descriptions, and scanning key experience points.
-- **Progress & History**: Dashboard tracking interview readiness over time, past session recordings, and upcoming scheduled interviews.
-- **Onboarding & Authentication**: Account setup, skill selection, and preference configuration.
+It keeps track of time just like a real interview (10, 20, or 30 minutes) and moves between topics so you get a well-rounded conversation covering architecture, databases, concurrency, and teamwork.
 
----
+If you connect a resume, it pulls from your actual past projects and tech stack instead of asking hypothetical questions.
 
-## Planned Development
 
-The following backend systems and integrations are currently in progress:
+## Targeted practice
 
-1. **Audio Streaming & Transcription**: Low-latency on-device or server-side speech recognition.
-2. **Conversational Interview Agent**: LLM-driven interviewer that detects key concepts in answers and generates dynamic technical follow-ups.
-3. **Automated Rubric Scoring**: Backend evaluation model that assesses trade-off depth and clarity against objective benchmarks.
-4. **Backend Sync & Storage**: Secure persistence for candidate resumes, session transcripts, and progress metrics.
+At the end of each session, you get feedback broken down into three areas:
+- Technical correctness: Did you explain the concepts accurately?
+- Trade-off articulation: Did you justify your decisions and weigh alternatives?
+- Communication: Was your answer structured and clear?
 
----
+If you hit Rehearse Again, Rehearse automatically takes the biggest gap identified in that round and brings it up in the next interview. That way you spend time fixing the specific things you struggle to explain out loud.
 
-## Requirements
 
+## What is implemented
+
+The current iOS client includes the complete interface and prototype interactions:
+- Live interview room with timer controls, prompt progression, and answer review
+- Feedback scorecards measuring technical precision, trade-offs, and structure
+- Question library and domain collections
+- Resume viewer, builder, scanner, and job-tailoring flows
+- Onboarding, authentication, and interview readiness history
+
+Live audio streaming, dynamic LLM follow-up generation, and backend account persistence are currently in progress.
+
+
+## Privacy
+
+Audio input is used exclusively for speech transcription and answer evaluation. No background audio is recorded or stored without your knowledge.
+
+We do not run facial emotion tracking, eye-contact metrics, or speculative behavioral scores. The feedback is based purely on what you say and how you defend your technical choices.
+
+
+## Running locally
+
+### Requirements
 - macOS 15.0 or later
 - Xcode 16.0 or later
-- iOS 18.0 or later (Simulator or physical device)
+- iOS 18.0+ Simulator or connected iPhone
 
----
+### Setup
 
-## Running Locally
+Clone the repository:
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/calmerism/RehearseiOS.git
-   cd RehearseiOS
-   ```
+```bash
+git clone https://github.com/calmerism/RehearseiOS.git
+cd RehearseiOS
+```
 
-2. Open the project in Xcode:
-   ```bash
-   open Rehearse.xcodeproj
-   ```
+Open the project in Xcode:
 
-3. Select the **Rehearse** scheme and an iOS Simulator (for example, iPhone 16 Pro) or your connected device.
+```bash
+open Rehearse.xcodeproj
+```
 
-4. Press **⌘R** (or select **Product > Run**) to build and launch the app. The app boots with sample data and mock services ready for local testing.
+Select the **Rehearse** scheme and an iOS Simulator (e.g. iPhone 16 Pro) or your connected device, then press **⌘R** (or **Product > Run**).
 
----
+The app includes built-in mock services and demo data out of the box, allowing you to run and test the complete interview loop, resume viewer, and feedback screens immediately offline.
 
-## Tech Stack & Architecture
 
-- **UI Framework**: SwiftUI (Swift 6)
-- **State Management**: Swift Observation framework (`@Observable`)
-- **Design System**: Apple Human Interface Guidelines standards with San Francisco typography, semantic grouped surfaces, and full Light/Dark mode support
-- **Project Structure**: Native Xcode 16 folder-synchronized project (`PBXFileSystemSynchronizedRootGroup`)
+## Built with
 
----
+- SwiftUI & Swift 6
+- Modern Observation (`@Observable`)
+- Apple Human Interface Guidelines Design System
+- Adaptive Light & Dark mode architecture
+
 
 ## License
 
