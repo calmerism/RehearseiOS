@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// The last stop before a rehearsal. For the upcoming interview the context is
-/// already known, so it is shown rather than asked for again; a custom mock
-/// asks for the role and company, typed in, and the interview type. Both offer the length, which sets how many
-/// topics are asked.
+/// The last stop before a rehearsal, presented as a sheet. For an upcoming
+/// interview the context is already known, so it is shown rather than asked
+/// for again; a custom mock asks for the target company and role, experience
+/// level and interview type, and offers the length, which sets how many
+/// topics are asked. Quick Prep keeps the real interview's length. Both end
+/// with the resume the interviewer reads.
 struct InterviewSetupView: View {
     let mode: SetupMode
 
@@ -11,7 +13,16 @@ struct InterviewSetupView: View {
     @State private var role = ""
     @State private var company = ""
     @State private var type: InterviewType = .technical
+    @State private var experienceLevel = MockData.candidateExperienceLevel
+    /// Typed when Experience Level is Custom.
+    @State private var customExperience = ""
     @State private var durationMinutes = 20
+    /// Starts as the version made for this interview, or the Profile resume.
+    @State private var resumeChoice: ResumeChoice?
+    /// A file being read, or one that couldn't be, when uploading here.
+    @State private var upload: ResumeStatus = .none
+    @State private var resumeSource: ResumeSource?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         List {
@@ -20,16 +31,21 @@ struct InterviewSetupView: View {
             case .custom: customContext
             }
             lengthSection
+            resumeSection
         }
-        .contentMargins(.top, AppTheme.Spacing.sm, for: .scrollContent)
-        .warmBackground()
-        .navigationTitle(mode == .custom ? "Mock Interview" : "Rehearse Interview")
+        .appListStyle()
+        .navigationTitle(mode == .custom ? "Interview Setup" : "Quick Prep")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+        }
         .safeAreaBar(edge: .bottom) {
             BottomActions {
-                PrimaryButton(title: "Start Interview", systemImage: "mic") {
+                PrimaryButton(title: "Start Interview") {
                     if let interview {
-                        appState.startInterview(interview, useResume: usesResume)
+                        appState.startInterview(interview, resume: resumeChoice.flatMap(appState.resumeContext(for:)))
                     }
                 }
                 .disabled(interview == nil)
@@ -38,8 +54,12 @@ struct InterviewSetupView: View {
         .onAppear {
             if case .upcoming(let id) = mode, let upcoming = appState.upcomingInterview(id: id) {
                 durationMinutes = upcoming.durationMinutes
+                resumeChoice = appState.defaultResumeChoice(for: id)
+            } else {
+                resumeChoice = appState.defaultResumeChoice(for: nil)
             }
         }
+        .resumeSources($resumeSource) { read($0) }
     }
 
     /// The interview that will be rehearsed. For the upcoming interview its
@@ -53,20 +73,18 @@ struct InterviewSetupView: View {
         case .custom:
             let role = role.trimmingCharacters(in: .whitespaces)
             let company = company.trimmingCharacters(in: .whitespaces)
-            guard !role.isEmpty else { return nil }
+            let level = experienceLevel == Interview.customExperience
+                ? customExperience.trimmingCharacters(in: .whitespaces)
+                : experienceLevel
+            guard !role.isEmpty, !level.isEmpty else { return nil }
             return Interview(
                 role: role,
                 company: company.isEmpty ? nil : company,
-                experienceLevel: MockData.candidateExperienceLevel,
+                experienceLevel: level,
                 type: type,
                 durationMinutes: durationMinutes
             )
         }
-    }
-
-    /// A resume that's been read is always used; there's no per-interview choice.
-    private var usesResume: Bool {
-        appState.resume.context != nil
     }
 
     // MARK: - Context
@@ -76,37 +94,26 @@ struct InterviewSetupView: View {
         if let upcoming = appState.upcomingInterview(id: id) {
             Section {
                 HStack(spacing: AppTheme.Spacing.sm) {
-                    DateTile(date: upcoming.date, isHighlighted: true)
+                    DateTile(date: upcoming.date)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(upcoming.title)
-                            .font(.app(.headline))
-                        Text([upcoming.type.rawValue + " interview", upcoming.countdownText?.lowercased()].compactMap { $0 }.joined(separator: " "))
-                            .font(.app(.subheadline))
+                            .font(.headline)
+                        Text([upcoming.type.interviewName, upcoming.countdownText?.lowercased()].compactMap { $0 }.joined(separator: " "))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, AppTheme.Spacing.xxs)
                 .accessibilityElement(children: .combine)
             } header: {
-                Group {
-                    HStack {
-                        Text("Rehearsing for")
-                        Spacer()
-                        Button("Edit") { appState.interviewEditor = InterviewEditorRequest(interview: upcoming) }
-                            .font(.app(.footnote, weight: .semibold))
-                            .textCase(nil)
-                    }
-                }
-                .font(.app(.footnote, weight: .semibold))
+                Text("Rehearsing For")
+                .listHeadingInset()
             } footer: {
-                Group {
-                    if let focus = appState.currentFocus {
-                        Text("Questions are picked for this role and type. Last time it was your \(focus.title.lowercased()), so keep an eye on that.")
-                    } else {
-                        Text("Questions are picked for this role and type.")
-                    }
+                if let focus = appState.currentFocus {
+                    Text("Questions are picked for this role and type. Last time it was your \(focus.title.lowercased()), so keep an eye on that.")
+                } else {
+                    Text("Questions are picked for this role and type.")
                 }
-                .font(.app(.footnote))
             }
         }
     }
@@ -114,83 +121,206 @@ struct InterviewSetupView: View {
     @ViewBuilder
     private var customContext: some View {
         Section {
-            LabeledTextField(title: "Role", text: $role, prompt: "iOS Engineer", contentType: .jobTitle)
             LabeledTextField(title: "Company", text: $company, prompt: "Optional", contentType: .organizationName)
-        } footer: {
-            Group {
-                Text("Leave the company blank for a general interview.")
-            }
-            .font(.app(.footnote))
+            LabeledTextField(title: "Job Role", text: $role, prompt: "Enter Job Role", contentType: .jobTitle)
         }
 
         Section {
-            HStack(spacing: AppTheme.Spacing.sm) {
-                ForEach(InterviewType.allCases) { option in
-                    typeTile(option)
-                }
+            Picker("Experience Level", selection: $experienceLevel) {
+                ForEach(Interview.experienceLevels + [Interview.customExperience], id: \.self) { Text($0).tag($0) }
             }
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets())
+            if experienceLevel == Interview.customExperience {
+                LabeledTextField(title: "Your Level", text: $customExperience, prompt: "Enter Experience Level")
+            }
+        }
+
+        Section {
+            ForEach(InterviewType.allCases) { option in
+                typeRow(option)
+            }
         } header: {
-            Group {
-                Text("Interview type")
-            }
-            .font(.app(.footnote, weight: .semibold))
+            Text("Interview Type")
+            .listHeadingInset()
         }
     }
 
-    /// One choice of interview type: ink-dark when chosen, as in the reference.
-    private func typeTile(_ option: InterviewType) -> some View {
+    /// One choice, checked when chosen, as in Settings.
+    private func typeRow(_ option: InterviewType) -> some View {
         let isSelected = option == type
         return Button {
-            withAnimation(.easeOut(duration: 0.15)) { type = option }
+            type = option
         } label: {
-            VStack(spacing: AppTheme.Spacing.sm) {
-                Image(systemName: option.symbol)
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 40, height: 40)
-                    .background(isSelected ? Color.white.opacity(0.14) : AppTheme.chip, in: Circle())
+            HStack(spacing: AppTheme.Spacing.sm) {
                 Text(option.rawValue)
-                    .font(.app(.footnote, weight: .semibold))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-            }
-            .foregroundStyle(isSelected ? AppTheme.onInk : Color.primary)
-            .frame(maxWidth: .infinity, minHeight: 104)
-            .padding(.horizontal, AppTheme.Spacing.xs)
-            .background {
+                    .foregroundStyle(Color.primary)
+                Spacer(minLength: AppTheme.Spacing.xs)
                 if isSelected {
-                    RoundedRectangle(cornerRadius: AppTheme.Radius.card - 4)
-                        .fill(LinearGradient(colors: [AppTheme.inkHighlight, AppTheme.ink], startPoint: .top, endPoint: .bottom))
-                } else {
-                    Color.clear.cardBackground(cornerRadius: AppTheme.Radius.card - 4)
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(AppTheme.brand)
                 }
             }
+            .padding(.vertical, 2)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(option.rawValue)
-        .accessibilityValue(option.summary)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Options
 
+    /// A custom mock picks its length. Quick Prep rehearses the real
+    /// interview, so its length is the interview's own and isn't changed.
     private var lengthSection: some View {
         Section {
-            PillPicker(options: Interview.durations, selection: $durationMinutes) { "\($0) min" }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
-        } header: {
-            Group {
-                Text("Length")
+            if mode == .custom {
+                Picker("Length", selection: $durationMinutes) {
+                    ForEach(Interview.durations, id: \.self) { minutes in
+                        Text("\(minutes) min").tag(minutes)
+                    }
+                }
+            } else {
+                LabeledContent("Length", value: "\(durationMinutes) min")
             }
-            .font(.app(.footnote, weight: .semibold))
         } footer: {
-            Group {
+            if mode != .custom {
+                // A mock interview asks for nothing but the choices themselves.
                 Text("About \(MockInterviewService.topicCapacity(forMinutes: durationMinutes)) topics. You can stop early.")
             }
-            .font(.app(.footnote))
+        }
+    }
+}
+
+// MARK: - Resume
+
+private extension InterviewSetupView {
+    /// The resume the interviewer reads. The Profile one is attached already;
+    /// it can be swapped for a tailored version or a new file, or removed for
+    /// general questions. Nothing here changes the Profile, except that a
+    /// first resume uploaded here is saved there too.
+    var resumeSection: some View {
+        Section {
+            if case .parsing(let fileName) = upload {
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    ProgressView()
+                    Text("Reading \(fileName)…")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, AppTheme.Spacing.xxs)
+            } else if let resumeChoice, let context = appState.resumeContext(for: resumeChoice) {
+                attachedRow(resumeChoice, context: context)
+                Menu("Change Resume") {
+                    profileChoices
+                    Button("Upload New File", systemImage: "doc.badge.plus") { resumeSource = .file }
+                }
+                Button("Remove Resume", role: .destructive) {
+                    withAnimation { self.resumeChoice = nil }
+                }
+            } else {
+                if case .failed(let fileName, let reason) = upload {
+                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
+                        Label("Couldn’t read \(fileName)", systemImage: "exclamationmark.triangle.fill")
+                            .font(.headline)
+                        Text(reason)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, AppTheme.Spacing.xxs)
+                }
+                if appState.resume.context != nil {
+                    if appState.tailoredResumes.isEmpty {
+                        Button("Choose from Profile", systemImage: "person.crop.circle.fill") {
+                            withAnimation { resumeChoice = .original }
+                        }
+                    } else {
+                        Menu("Choose from Profile", systemImage: "person.crop.circle.fill") { profileChoices }
+                    }
+                }
+                Button("Upload New File", systemImage: "doc.badge.plus") { resumeSource = .file }
+            }
+        } header: {
+            Text("Resume")
+            .listHeadingInset()
+        } footer: {
+            if mode != .custom {
+                Text(resumeFooter)
+            }
+        }
+    }
+
+    /// The Profile resume and its tailored versions, checked when attached.
+    var profileChoices: some View {
+        Picker("From Your Profile", selection: $resumeChoice.animation()) {
+            if appState.resume.context != nil {
+                Text("Original Resume").tag(ResumeChoice?.some(.original))
+            }
+            ForEach(appState.tailoredResumes) { version in
+                Text("For \(version.target), \(version.angle.lowercased())")
+                    .tag(ResumeChoice?.some(.tailored(version.id)))
+            }
+        }
+        .pickerStyle(.inline)
+    }
+
+    func attachedRow(_ choice: ResumeChoice, context: ResumeContext) -> some View {
+        let title: String
+        let subtitle: String
+        switch choice {
+        case .original:
+            title = context.fileName
+            subtitle = "From your Profile"
+        case .tailored(let id):
+            let version = appState.tailoredResume(id: id)
+            title = "Tailored for \(version?.target ?? "This Role")"
+            subtitle = version?.angle ?? context.fileName
+        case .uploaded:
+            title = context.fileName
+            subtitle = "For this interview only"
+        }
+        return HStack(spacing: AppTheme.Spacing.sm) {
+            Image(systemName: "doc.text")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, AppTheme.Spacing.xxs)
+        .accessibilityElement(children: .combine)
+    }
+
+    var resumeFooter: String {
+        guard let resumeChoice, appState.resumeContext(for: resumeChoice) != nil else {
+            return "Without a resume, you’ll get general questions."
+        }
+        return "The interviewer will ask about the projects on this resume."
+    }
+
+    /// A first resume is saved to the Profile; otherwise the file is used for
+    /// this interview only, so the Profile resume is never replaced by surprise.
+    func read(_ fileName: String) {
+        upload = .parsing(fileName: fileName)
+        Task {
+            let result = await AppState.readResume(named: fileName)
+            guard upload == .parsing(fileName: fileName) else { return }
+            withAnimation {
+                guard let context = result.context else {
+                    upload = result
+                    return
+                }
+                upload = .none
+                if appState.resume.context == nil {
+                    appState.resume = result
+                    resumeChoice = .original
+                } else {
+                    resumeChoice = .uploaded(context)
+                }
+            }
         }
     }
 }
@@ -199,8 +329,7 @@ private extension InterviewType {
     var symbol: String {
         switch self {
         case .technical: "chevron.left.forwardslash.chevron.right"
-        case .behavioral: "person.2"
-        case .systemDesign: "square.stack.3d.up"
+        case .nonTechnical: "person.2"
         }
     }
 }

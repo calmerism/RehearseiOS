@@ -30,8 +30,9 @@ struct Rehearsal: Identifiable, Hashable {
     var subtitle: String {
         let day = date.formatted(.relative(presentation: .named)).capitalizedFirst
         switch kind {
-        case .interview: return "\(interview?.type.rawValue ?? "Mock") interview, \(day.lowercased())"
-        case .practice: return "Practice, \(day.lowercased())"
+        // "Technical Interview from 2 days ago": joined with a word, not a comma.
+        case .interview: return "\(interview?.type.interviewName ?? "Mock Interview") from \(day.lowercased())"
+        case .practice: return "Practice answer from \(day.lowercased())"
         }
     }
 }
@@ -40,6 +41,19 @@ struct TranscriptEntry: Hashable {
     var question: String
     var answer: String
     var isFollowUp: Bool
+    /// How this answer went, for a main question. Follow-ups have none.
+    var moment: InterviewTurn.Moment? = nil
+    /// What was actually said, when part of it was in Hindi; `answer` is
+    /// the same answer in English.
+    var spokenAnswer: String? = nil
+    /// The Hindi parts of `spokenAnswer`, each with its English.
+    var hindiLines: [HindiLine] = []
+
+    /// The skill this answer fell short on, if any.
+    var weakSkill: Skill? {
+        if case .weakness(let skill) = moment?.kind { return skill }
+        return nil
+    }
 }
 
 private extension String {

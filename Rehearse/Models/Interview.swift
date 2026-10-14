@@ -2,19 +2,30 @@ import Foundation
 
 enum InterviewType: String, CaseIterable, Identifiable, Hashable {
     case technical = "Technical"
-    case behavioral = "Behavioral"
-    case systemDesign = "System Design"
+    case nonTechnical = "Non-Technical"
 
     var id: Self { self }
+
+    /// The interview's name, capitalized as a title: "Technical Interview".
+    var interviewName: String { "\(rawValue) Interview" }
 
     /// Shown during setup so the choice is an informed one rather than a label.
     var summary: String {
         switch self {
         case .technical: "Your projects, technical decisions and debugging."
-        case .behavioral: "Teamwork, ownership and how you handle setbacks."
-        case .systemDesign: "Designing a system out loud and defending trade-offs."
+        case .nonTechnical: "Teamwork, ownership and how you handle setbacks."
         }
     }
+}
+
+/// Part of an answer said in Hindi, as students often slip into it mid
+/// answer, and how to say the same thing in English. Answer Review shows
+/// these so the candidate learns the English for what they meant.
+struct HindiLine: Hashable {
+    /// What was said, as heard.
+    let said: String
+    /// The same, said in English.
+    let english: String
 }
 
 /// The context an interview is rehearsed against: either a real interview the
@@ -60,6 +71,8 @@ struct Interview: Identifiable, Hashable {
 
 extension Interview {
     static let companies = ["Apple", "Google", "Microsoft", "Atlassian", "Canva"]
-    static let experienceLevels = ["Internship", "New Graduate", "Junior (1–2 years)"]
+    static let experienceLevels = ["Internship", "New Graduate"]
+    /// The last choice: the candidate types their own level.
+    static let customExperience = "Custom"
     static let durations = [15, 20, 30]
 }

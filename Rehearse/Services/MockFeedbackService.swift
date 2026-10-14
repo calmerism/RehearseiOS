@@ -9,14 +9,12 @@ enum MockFeedbackService {
 
         if usedResume {
             // Real projects make answers more specific.
-            base.overall += 3
             base.answerQuality += 4
         }
 
         let missing = plannedTurns.count - answeredTurns.count
         var coverageNote: String?
         if missing > 0 {
-            base.overall -= missing * 3
             coverageNote = "Based on \(answeredTurns.count) of \(plannedTurns.count) topics. A full interview gives you a better read."
         }
 
@@ -29,13 +27,13 @@ enum MockFeedbackService {
 
         var strengths = answeredTurns
             .filter { $0.moment.kind == .strength }
-            .map(\.moment.note)
+            .map(\.moment.headline)
         if strengths.isEmpty {
-            strengths = ["You stayed calm and answered everything."]
+            strengths = ["Answered every question"]
         }
 
-        return Feedback(
-            overall: base.overall,
+        var feedback = Feedback(
+            overall: 0,
             communication: base.communication,
             communicationNote: base.communicationNote,
             answerQuality: base.answerQuality,
@@ -44,8 +42,12 @@ enum MockFeedbackService {
             strengths: Array(strengths.prefix(3)),
             focus: focus,
             focusEvidence: evidence,
-            coverageNote: coverageNote
+            coverageNote: coverageNote,
+            deduction: max(missing, 0) * 3
         )
+        // The total is always its parts added up.
+        feedback.overall = feedback.scoredTotal
+        return feedback
     }
 
     /// Stands in for the recommendation engine: questions that exercise the
@@ -68,9 +70,9 @@ enum MockFeedbackService {
         case .answerStructure:
             "You opened with your answer this time, and the details that followed were easy to place. Keep that first sentence short."
         case .concreteResults:
-            "Much clearer about what you did yourself. Add one number for the result and it’s there."
+            "Much clearer about what you did yourself. Add one number for the result."
         case .tradeoffs:
-            "You said what else you considered and why you didn’t pick it. That’s the habit."
+            "You said what else you considered and why you didn’t pick it."
         case nil:
             "Got it. Do a mock interview and we’ll tell you what to practice next."
         }
@@ -81,7 +83,7 @@ enum MockFeedbackService {
         case .answerStructure:
             "Your examples were good, but a lot of answers started with the details before the point. Say your answer first and the rest is much easier to follow."
         case .concreteResults:
-            "Good stories, but it was often hard to tell what you did yourself and how it ended. Interviewers need both."
+            "Good stories, but it was often hard to tell what you did yourself and how it ended."
         case .tradeoffs:
             "Your designs worked, but you rarely said what you gave up. Interviewers want to hear what else you considered."
         }
@@ -103,25 +105,17 @@ enum MockFeedbackService {
             Baseline(
                 overall: 74, communication: 72,
                 communicationNote: "Clear and calm, but long answers lost the thread.",
-                answerQuality: 76, answerQualityNote: "Technically solid, with good reasoning.",
+                answerQuality: 76, answerQualityNote: "Technically solid, and you explained why each step came next.",
                 focus: .answerStructure,
                 evidence: "A lot of answers started with the details before the point."
             )
-        case .behavioral:
+        case .nonTechnical:
             Baseline(
                 overall: 70, communication: 76,
-                communicationNote: "You sounded natural and confident.",
+                communicationNote: "Steady pace, with few filler words.",
                 answerQuality: 64, answerQualityNote: "Relevant stories, but outcomes were often missing.",
                 focus: .concreteResults,
                 evidence: "Several stories ended without saying what changed."
-            )
-        case .systemDesign:
-            Baseline(
-                overall: 68, communication: 70,
-                communicationNote: "You thought out loud, which helped.",
-                answerQuality: 66, answerQualityNote: "Workable designs, thin on alternatives.",
-                focus: .tradeoffs,
-                evidence: "You gave design choices without saying what else you considered."
             )
         }
     }

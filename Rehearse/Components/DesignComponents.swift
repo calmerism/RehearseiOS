@@ -1,103 +1,311 @@
 import SwiftUI
 
-// MARK: - Canvas
+// MARK: - Page
 
-/// The warm page behind every screen: cream fading to sand, with soft light
-/// pooling at the bottom.
-struct WarmBackground: View {
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [AppTheme.canvasTop, AppTheme.canvasBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                Circle()
-                    .fill(AppTheme.glowRose)
-                    .frame(width: width * 0.95)
-                    .blur(radius: 80)
-                    .opacity(0.55)
-                    .position(x: width * 0.12, y: proxy.size.height * 0.68)
-                Circle()
-                    .fill(AppTheme.glowPeach)
-                    .frame(width: width * 1.1)
-                    .blur(radius: 90)
-                    .opacity(0.65)
-                    .position(x: width * 0.85, y: proxy.size.height * 0.92)
-            }
-        }
-        .ignoresSafeArea()
-        .accessibilityHidden(true)
+extension View {
+    /// Puts a scrolling screen of cards on the system grouped background.
+    /// Lists and forms already have it.
+    func groupedBackground() -> some View {
+        background(AppTheme.background)
+    }
+
+    /// Every list and form: large section headings (the same style as
+    /// `SectionTitle` on card screens) and the same gap between sections.
+    func appListStyle() -> some View {
+        headerProminence(.increased)
+            .listSectionSpacing(AppTheme.Spacing.md)
+            // Lists start closer to the title than scroll views do; this
+            // puts their first card where Home's is.
+            .contentMargins(.top, AppTheme.Spacing.xs, for: .scrollContent)
+            .debugScrollAnchor()
+    }
+
+    /// Moves a list section's header out to the heading margin, so it lines up
+    /// with the page title and the headings on card screens.
+    func listHeadingInset() -> some View {
+        padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md * 2)
+    }
+
+    /// A card on the grouped background, shaped like an inset-grouped row.
+    func cardBackground(cornerRadius: CGFloat = AppTheme.Radius.card) -> some View {
+        background(AppTheme.cardFill, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    /// Grows what a finger can hit to Apple's 44 × 44pt minimum without
+    /// moving anything: pad out, take that as the hit area, pad back in.
+    /// Use it inside a button's label, on small links and glyphs.
+    func tapTarget(_ outset: CGFloat = 12) -> some View {
+        padding(outset).contentShape(Rectangle()).padding(-outset)
+    }
+}
+
+// MARK: - Tab header
+
+private struct TabRootKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True for the first screen of a tab, false once something is pushed.
+    var isTabRoot: Bool {
+        get { self[TabRootKey.self] }
+        set { self[TabRootKey.self] = newValue }
+    }
+}
+
+/// What a tab's header shows, handed down to the `TabHeader` at the top of
+/// the screen's content.
+struct TabHeaderContent {
+    let title: String
+    var isLogo = false
+    let trailing: AnyView
+}
+
+private struct TabHeaderKey: EnvironmentKey {
+    static let defaultValue: TabHeaderContent? = nil
+}
+
+/// A pushed page's title and subtitle, drawn by `TabHeader` at the top of
+/// its content so they scroll away with the page.
+struct PageHeaderContent {
+    let title: String
+    var subtitle: String?
+}
+
+private struct PageHeaderKey: EnvironmentKey {
+    static let defaultValue: PageHeaderContent? = nil
+}
+
+private struct InListKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var tabHeader: TabHeaderContent? {
+        get { self[TabHeaderKey.self] }
+        set { self[TabHeaderKey.self] = newValue }
+    }
+
+    var pageHeader: PageHeaderContent? {
+        get { self[PageHeaderKey.self] }
+        set { self[PageHeaderKey.self] = newValue }
+    }
+
+    /// Set on a header drawn as a list row.
+    var isInList: Bool {
+        get { self[InListKey.self] }
+        set { self[InListKey.self] = newValue }
     }
 }
 
 extension View {
-    /// Puts a screen on the warm canvas. Lists and forms drop their own
-    /// grouped background so the canvas shows through.
-    func warmBackground() -> some View {
-        scrollContentBackground(.hidden)
-            .background(WarmBackground())
+    /// A pushed page's title, in the bar's own small centered style but at
+    /// the top of the page's content, so it scrolls away with the page and
+    /// only the back button stays. The page puts a `TabHeader` (or
+    /// `TabHeaderSection` in a list) first in its content.
+    func scrollingTitle(_ title: String, subtitle: String? = nil, inList: Bool = true) -> some View {
+        modifier(ScrollingTitle(title: title, subtitle: subtitle, inList: inList))
+    }
+}
+
+/// See `scrollingTitle`. A list runs up to the top of the screen so its
+/// title row can sit level with the back button (lists clip anything moved
+/// out of a row); a scroll view keeps its place and lifts the title instead.
+private struct ScrollingTitle: ViewModifier {
+    let title: String
+    let subtitle: String?
+    let inList: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .navigationTitle(title)
+            .toolbar {
+                // The bar's own title is left empty; the page draws it.
+                ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+            }
+            .environment(\.pageHeader, PageHeaderContent(title: title, subtitle: subtitle))
+            .ignoresSafeArea(.container, edges: inList ? .top : [])
+    }
+}
+
+/// The one header every tab shares: a large bold title with an optional
+/// plain icon on the right. On a tab's first screen it's the first thing in
+/// the content (`TabHeader`), so it scrolls away with the page like a large
+/// title; content under the status bar gets the system edge blur. Pushed from
+/// elsewhere, the same screen keeps the standard bar, so it still has a back
+/// button.
+private struct ScreenTitle<Trailing: View>: ViewModifier {
+    let title: String
+    var isLogo = false
+    var inList = true
+    let trailing: Trailing
+    @Environment(\.isTabRoot) private var isTabRoot
+
+    func body(content: Content) -> some View {
+        if isTabRoot {
+            content
+                .navigationTitle(title)
+                .toolbar(.hidden, for: .navigationBar)
+                .environment(\.tabHeader, TabHeaderContent(title: title, isLogo: isLogo, trailing: AnyView(trailing)))
+        } else {
+            content
+                .scrollingTitle(title, inList: inList)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) { trailing }
+                }
+        }
+    }
+}
+
+/// The header itself, placed first in a tab's scrolling content. Draws
+/// nothing on a pushed screen, which uses the navigation bar instead.
+struct TabHeader: View {
+    @Environment(\.tabHeader) private var header
+    @Environment(\.isTabRoot) private var isTabRoot
+
+    @Environment(\.pageHeader) private var page
+    @Environment(\.isInList) private var isInList
+
+    /// Where a pushed page's title sits from the top of the screen: level
+    /// with the back button, where the bar's own title would be.
+    static let pageTitleTop: CGFloat = 68.3
+
+    /// How far a title without a subtitle drops to sit on the back button's
+    /// center line.
+    private var centering: CGFloat { page?.subtitle == nil ? 7 : 0 }
+
+    var body: some View {
+        if !isTabRoot, let page {
+            // The bar's own title and subtitle sizes, so it looks as it did
+            // pinned in the bar.
+            VStack(spacing: 2) {
+                Text(page.title)
+                    .font(.system(size: 15, weight: .semibold))
+                if let subtitle = page.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11.25))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 60)
+            // In a list the row sits at the top of the screen; in a scroll
+            // view it's lifted from below the bar and the room taken back
+            // underneath, so the first card starts where it did.
+            // A title alone drops by half a subtitle's height, so it's
+            // centered on the back button just as a title and subtitle are;
+            // the room comes back underneath, so the content doesn't move.
+            .padding(.top, (isInList ? Self.pageTitleTop - AppTheme.Spacing.xs : -55.7) + centering)
+            // Without a subtitle the first card comes up by the subtitle's
+            // room, so the gap under the title matches the list pages'.
+            .padding(.bottom, (isInList ? AppTheme.Spacing.xs : page.subtitle == nil ? -14 : 1.7) - centering)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+        } else if isTabRoot, let header {
+            HStack(alignment: .center) {
+                titleText(header)
+                    .font(.pageTitle)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityLabel(header.title)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                header.trailing
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(AppTheme.brand)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                    .contentShape(Rectangle())
+            }
+            // On the heading margin, the same line as every section heading;
+            // content is already inset by 16.
+            .padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md)
+            .padding(.top, AppTheme.Spacing.xs)
+        }
     }
 
-    /// A milky, slightly translucent panel with a fine light edge.
-    func cardBackground(cornerRadius: CGFloat = AppTheme.Radius.card) -> some View {
-        background {
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(AppTheme.cardFill)
-                .overlay {
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .strokeBorder(AppTheme.cardEdge, lineWidth: 1)
-                }
-                .shadow(color: Color(red: 0.6, green: 0.35, blue: 0.2).opacity(0.06), radius: 16, y: 6)
+    /// The wordmark on Home: tighter letters and an accent full stop, as
+    /// the logo is drawn.
+    private func titleText(_ header: TabHeaderContent) -> Text {
+        guard header.isLogo else { return Text(header.title) }
+        return Text("\(Text(header.title).tracking(-1.2))\(Text(".").foregroundStyle(AppTheme.brand))")
+    }
+}
+
+/// `TabHeader` as the first row of a list, on the page rather than in a card.
+struct TabHeaderSection: View {
+    @Environment(\.isTabRoot) private var isTabRoot
+    @Environment(\.pageHeader) private var page
+
+    var body: some View {
+        if isTabRoot || page != nil {
+            Section {
+                TabHeader()
+                    .environment(\.isInList, true)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+            }
         }
+    }
+}
+
+extension View {
+    /// `inList` is false for a page that scrolls in a `ReportScroll`.
+    func screenTitle(_ title: String, inList: Bool = true) -> some View {
+        modifier(ScreenTitle(title: title, inList: inList, trailing: EmptyView()))
+    }
+
+    func screenTitle<Trailing: View>(_ title: String, inList: Bool = true, @ViewBuilder trailing: () -> Trailing) -> some View {
+        modifier(ScreenTitle(title: title, inList: inList, trailing: trailing()))
+    }
+
+    /// The app's own name, drawn as its wordmark.
+    func logoTitle<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+        modifier(ScreenTitle(title: title, isLogo: true, trailing: trailing()))
     }
 }
 
 // MARK: - Cards
 
-/// A symbol on a white disc: how every card and row is anchored.
-struct IconChip: View {
-    let systemImage: String
-    var tint: Color = .primary
-    var size: CGFloat = 32
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: size * 0.44, weight: .regular))
-            .foregroundStyle(tint)
-            .frame(width: size, height: size)
-            .background(AppTheme.chip, in: Circle())
-            .accessibilityHidden(true)
-    }
-}
-
-/// The top line of a card: an icon chip and what the card is about.
+/// The top line of a card, as in Health's summaries: a title in secondary
+/// gray, with an optional detail and chevron on the right. A symbol only
+/// where it helps recognize the card; most cards go without. The accent
+/// stays for what can be tapped and for progress.
 struct CardHeader: View {
     let title: String
-    let systemImage: String
-    var tint: Color = .primary
+    var systemImage: String?
+    var tint: Color = .secondary
     var detail: String?
     var showsChevron = false
 
     var body: some View {
-        HStack(spacing: AppTheme.Spacing.sm) {
-            IconChip(systemImage: systemImage, tint: tint)
-            Text(title)
-                .font(.app(.subheadline, weight: .medium))
-                .foregroundStyle(.secondary)
+        HStack(spacing: AppTheme.Spacing.xs) {
+            // The symbol sits on the card's edge, as Health draws it, with a
+            // tight gap to the title, so the lines below can start on that
+            // same edge.
+            HStack(spacing: 5) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .accessibilityHidden(true)
+                }
+                Text(title)
+            }
+                .font(.label)
+                .foregroundStyle(tint)
+                .symbolRenderingMode(.hierarchical)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .layoutPriority(1)
             Spacer(minLength: AppTheme.Spacing.xs)
             if let detail {
                 Text(detail)
-                    .font(.app(.footnote, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             if showsChevron {
                 Image(systemName: "chevron.right")
-                    .font(.app(.footnote, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
@@ -108,8 +316,8 @@ struct CardHeader: View {
 /// A card with a header and content.
 struct SummaryCard<Content: View>: View {
     let title: String
-    let systemImage: String
-    var tint: Color = .primary
+    var systemImage: String?
+    var tint: Color = .secondary
     var detail: String?
     var showsChevron = false
     @ViewBuilder let content: Content
@@ -133,13 +341,67 @@ struct BigValue: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.xxs) {
             Text(value)
-                .font(.app(.title, weight: .bold).monospacedDigit())
+                .font(.system(.title, weight: .bold).monospacedDigit())
+                .contentTransition(.numericText())
             if let unit {
                 Text(unit)
-                    .font(.app(.footnote, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// The habit to apply, as one line with a lightbulb. The one way a tip is
+/// shown: in Practice, the feedback report and the live interview.
+struct TipRow: View {
+    let text: String
+
+    var body: some View {
+        Label {
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "lightbulb")
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Tip: \(text)")
+    }
+}
+
+/// A row of figures, each a label over its value, split by hairlines. The
+/// one way summary numbers are shown, on History and Profile.
+struct StatGroup: View {
+    struct Item: Identifiable {
+        let label: String
+        let value: String
+        var id: String { label }
+    }
+
+    let items: [Item]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 { Divider() }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.label)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text(item.value)
+                        .font(.title2.weight(.bold).monospacedDigit())
+                        .contentTransition(.numericText())
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, index > 0 ? AppTheme.Spacing.sm : 0)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -149,173 +411,266 @@ struct DeltaText: View {
 
     var body: some View {
         Text(delta > 0 ? "+\(delta)" : delta < 0 ? "−\(-delta)" : "No change")
-            .font(.app(.footnote, weight: .semibold).monospacedDigit())
-            .foregroundStyle(delta > 0 ? AppTheme.success : delta < 0 ? AppTheme.brand : Color.secondary)
+            .font(.footnote.weight(.semibold).monospacedDigit())
+            .foregroundStyle(delta > 0 ? AppTheme.success : delta < 0 ? AppTheme.record : Color.secondary)
             .accessibilityLabel(delta > 0 ? "Up \(delta)" : delta < 0 ? "Down \(-delta)" : "No change")
     }
 }
 
-/// A heading between groups of cards, with an optional quiet trailing action.
+/// A heading between groups of cards, as in Health and the App Store, with an
+/// optional trailing action in the tint color. A `destination` pushes a page
+/// and reads "See All ›"; an `action` with an `actionImage` shows just the symbol.
 struct SectionTitle: View {
     let title: String
     var actionTitle: String?
-    var actionImage = "chevron.right"
+    var actionImage: String?
+    var destination: Route?
     var action: (() -> Void)?
+    /// A second, symbol-only action before "See All ›", like Add.
+    var extraActionTitle: String?
+    var extraActionImage: String?
+    var extraAction: (() -> Void)?
+    /// Makes the heading itself a link, with a chevron after it, as Music
+    /// and the App Store head a shelf that opens in full.
+    var titleDestination: Route?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .font(.app(.headline))
+        HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.lg) {
+            if let titleDestination {
+                NavigationLink(value: titleDestination) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(title)
+                            .font(.sectionTitle)
+                            .foregroundStyle(Color.primary)
+                        Image(systemName: "chevron.right")
+                            .font(.body.weight(.bold))
+                            // A solid gray, not the link's tint faded.
+                            .foregroundStyle(Color(.secondaryLabel))
+                    }
+                    .tapTarget()
+                }
                 .accessibilityAddTraits(.isHeader)
-            Spacer()
-            if let actionTitle, let action {
-                Button(action: action) {
-                    HStack(spacing: 3) {
-                        Text(actionTitle)
-                        Image(systemName: actionImage)
-                            .font(.app(.caption2, weight: .bold))
+                .accessibilityHint("Shows all of them")
+            } else {
+                Text(title)
+                    .font(.sectionTitle)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            Spacer(minLength: 0)
+            if let extraActionTitle, let extraActionImage, let extraAction {
+                Button(action: extraAction) {
+                    Image(systemName: extraActionImage)
+                        .font(.title3.weight(.semibold))
+                        .frame(height: 20)
+                        .tapTarget()
+                        .accessibilityLabel(extraActionTitle)
+                }
+            }
+            if let actionTitle {
+                if let destination {
+                    NavigationLink(value: destination) {
+                        actionLabel(actionTitle)
+                    }
+                } else if let action {
+                    Button(action: action) {
+                        actionLabel(actionTitle)
                     }
                 }
-                .font(.app(.footnote))
-                .foregroundStyle(.secondary)
             }
         }
-        .padding(.top, AppTheme.Spacing.md)
-        .padding(.horizontal, AppTheme.Spacing.md)
+        // On the heading margin with the page title (the page already pads
+        // 16pt); 32pt from the card above, 13pt to the card below.
+        .padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md)
+        .padding(.top, 14)
+        .padding(.bottom, -3)
+    }
+
+    @ViewBuilder
+    private func actionLabel(_ title: String) -> some View {
+        if let actionImage {
+            // Icon only, a plain tinted glyph as Reminders adds to a list;
+            // the title is read aloud.
+            Image(systemName: actionImage)
+                .font(.title3.weight(.semibold))
+                .frame(height: 20)
+                .tapTarget()
+                .accessibilityLabel(title)
+        } else {
+            HStack(spacing: 3) {
+                Text(title)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+            }
+            .tapTarget()
+        }
     }
 }
 
-/// An overall score out of 100, drawn as a ring.
+/// How something went, as a symbol alone: a green tick when it went well,
+/// an orange exclamation mark when it partly did, a red cross when it
+/// didn't. The same three everywhere a score is judged, with no words.
+struct VerdictIcon: View {
+    let score: Int
+
+    enum Kind { case good, partial, wrong }
+
+    static func kind(for score: Int) -> Kind {
+        switch score {
+        case 80...: .good
+        case 40...: .partial
+        default: .wrong
+        }
+    }
+
+    var body: some View {
+        let kind = Self.kind(for: score)
+        Image(systemName: Self.symbol(kind))
+            .foregroundStyle(Self.color(kind))
+            .accessibilityLabel(Self.label(kind))
+    }
+
+    static func symbol(_ kind: Kind) -> String {
+        switch kind {
+        case .good: "checkmark.circle.fill"
+        case .partial: "exclamationmark.circle.fill"
+        case .wrong: "xmark.circle.fill"
+        }
+    }
+
+    static func color(_ kind: Kind) -> Color {
+        switch kind {
+        case .good: AppTheme.practiced
+        case .partial: AppTheme.graphic
+        case .wrong: AppTheme.record
+        }
+    }
+
+    static func label(_ kind: Kind) -> String {
+        switch kind {
+        case .good: "Went well"
+        case .partial: "Partly"
+        case .wrong: "Went wrong"
+        }
+    }
+}
+
+/// An overall score out of 100, drawn as a ring, as in Fitness. The ring's
+/// color says how good the score is: red, orange, yellow, then green.
 struct ScoreRing: View {
     let score: Int?
     var caption: String?
     var size: CGFloat = 84
+    /// The change since last time, shown small under the caption.
+    var delta: Int? = nil
+    @State private var progress: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var lineWidth: CGFloat { max(8, size * 0.11) }
+    private var target: CGFloat { CGFloat(min(max(score ?? 0, 0), 100)) / 100 }
+
+    /// Red below 40, orange to 79, yellow to 89, green from 90.
+    static func color(for score: Int) -> Color {
+        switch score {
+        case ..<40: .red
+        case ..<80: .orange
+        case ..<90: .yellow
+        default: .green
+        }
+    }
 
     var body: some View {
         ZStack {
             // Inset by half the line width so the stroke stays inside the frame.
             Circle()
-                .inset(by: 5)
-                .stroke(AppTheme.chip, lineWidth: 10)
-                .shadow(color: .black.opacity(0.05), radius: 2)
-            if let score {
-                let fraction = CGFloat(min(max(score, 0), 100)) / 100
+                .inset(by: lineWidth / 2)
+                .stroke(AppTheme.track, lineWidth: lineWidth)
+            if score != nil {
                 Circle()
-                    .inset(by: 5)
-                    .trim(from: 0, to: fraction)
-                    .stroke(
-                        AngularGradient(
-                            colors: [AppTheme.peach, AppTheme.brand],
-                            center: .center,
-                            startAngle: .degrees(0),
-                            endAngle: .degrees(360 * fraction)
-                        ),
-                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                    )
+                    .inset(by: lineWidth / 2)
+                    .trim(from: 0, to: progress)
+                    .stroke(Self.color(for: score ?? 0), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
+            // Number, caption and change as one group, centered in the ring.
             VStack(spacing: 0) {
-                Text(score.map { "\($0)" } ?? "–")
-                    .font(.app(.title3, weight: .bold).monospacedDigit())
-                if let caption {
-                    Text(caption)
-                        .font(.app(.caption2, weight: .medium))
+                if let score {
+                    Text("\(score)")
+                        .font(.system(size: size * 0.26, weight: .bold).monospacedDigit())
+                        // Tucks the caption up under the figures.
+                        .padding(.bottom, -size * 0.02)
+                } else {
+                    Text("No score")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
+                if let caption {
+                    Text(caption)
+                        .font(.system(size: max(11, size * 0.08), weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                if let delta, delta != 0 {
+                    HStack(alignment: .center, spacing: 3) {
+                        Image(systemName: delta > 0 ? "arrow.up" : "arrow.down")
+                            .font(.system(size: max(9, size * 0.06), weight: .bold))
+                        Text("\(abs(delta))")
+                            .font(.system(size: max(11, size * 0.075), weight: .semibold).monospacedDigit())
+                    }
+                    .foregroundStyle(delta > 0 ? AppTheme.success : AppTheme.record)
+                    .padding(.top, size * 0.035)
+                }
             }
+            // Optically centered: the figures have no descenders, so the
+            // group reads low unless it's raised a touch.
+            .offset(y: delta.map { $0 != 0 } == true ? -size * 0.022 : 0)
         }
         .frame(width: size, height: size)
-        .background(AppTheme.chip.opacity(0.7), in: Circle())
+        .onAppear {
+            guard progress != target else { return }
+            if reduceMotion {
+                progress = target
+            } else {
+                withAnimation(.smooth(duration: 0.9).delay(0.1)) { progress = target }
+            }
+        }
+        .onChange(of: score) { progress = target }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(score.map { "Score \($0) out of 100" } ?? "Not scored yet")
+        .accessibilityLabel(score.map { score in
+            let change = delta.map { $0 > 0 ? ", up \($0) from last time" : $0 < 0 ? ", down \(-$0) from last time" : "" } ?? ""
+            return "Score \(score) out of 100\(change)"
+        } ?? "Not scored yet")
     }
 }
 
-/// Pressed feedback for a whole card that navigates.
+/// Pressed feedback for a whole card that navigates: it dims, like a row.
 struct CardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .opacity(configuration.isPressed ? 0.8 : 1)
+            .opacity(configuration.isPressed ? 0.6 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
-/// Pressed feedback for a row inside a card.
+/// Pressed feedback for a row inside a card: the system row highlight.
 struct CardRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .background(configuration.isPressed ? AppTheme.track : .clear)
-    }
-}
-
-/// A row of capsule options, as in the reference's filters: the chosen one
-/// ink-dark, the rest milky.
-struct PillPicker<Value: Hashable>: View {
-    let options: [Value]
-    @Binding var selection: Value
-    let title: (Value) -> String
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AppTheme.Spacing.xs) {
-                ForEach(options, id: \.self) { option in
-                    let isSelected = option == selection
-                    Button {
-                        withAnimation(.easeOut(duration: 0.15)) { selection = option }
-                    } label: {
-                        Text(title(option))
-                            .font(.app(.footnote, weight: .semibold))
-                            .foregroundStyle(isSelected ? AppTheme.onInk : Color.primary)
-                            .padding(.horizontal, AppTheme.Spacing.md)
-                            .frame(minHeight: 34)
-                            .background {
-                                Capsule()
-                                    .fill(isSelected ? AppTheme.ink : AppTheme.chip)
-                                    .overlay { Capsule().strokeBorder(isSelected ? .clear : AppTheme.track, lineWidth: 1) }
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
-                }
-            }
-            .padding(.vertical, 2)
-        }
-        .scrollClipDisabled()
+            .background(configuration.isPressed ? Color(.systemGray4) : .clear)
     }
 }
 
 // MARK: - Buttons
 
-/// Ink-dark capsule for the main action; a quiet milky capsule otherwise.
-struct PillButtonStyle: ButtonStyle {
-    var isProminent = true
-    var isCompact = false
-    @Environment(\.isEnabled) private var isEnabled
+/// True inside `BottomActions`, where buttons float over content and so take
+/// Liquid Glass. Inside content they stay solid, per the HIG.
+private struct FloatingControlsKey: EnvironmentKey {
+    static let defaultValue = false
+}
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(isCompact ? .app(.footnote, weight: .semibold) : .app(.subheadline, weight: .semibold))
-            .foregroundStyle(isProminent ? AppTheme.onInk : Color.primary)
-            .padding(.horizontal, AppTheme.Spacing.lg)
-            .frame(minHeight: isCompact ? 36 : 50)
-            .background {
-                if isProminent {
-                    Capsule()
-                        .fill(LinearGradient(colors: [AppTheme.inkHighlight, AppTheme.ink], startPoint: .top, endPoint: .bottom))
-                        .overlay { Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 1) }
-                        .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
-                        .opacity(isEnabled ? 1 : 0.3)
-                } else {
-                    Capsule()
-                        .fill(AppTheme.chip)
-                        .overlay { Capsule().strokeBorder(AppTheme.track, lineWidth: 1) }
-                }
-            }
-            .opacity(configuration.isPressed ? 0.75 : 1)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+extension EnvironmentValues {
+    var isFloatingControl: Bool {
+        get { self[FloatingControlsKey.self] }
+        set { self[FloatingControlsKey.self] = newValue }
     }
 }
 
@@ -323,13 +678,47 @@ struct PrimaryButton: View {
     let title: String
     var systemImage: String?
     let action: () -> Void
+    @Environment(\.isFloatingControl) private var isFloating
+    @State private var taps = 0
 
     var body: some View {
-        Button(action: action) {
-            PillLabel(title: title, systemImage: systemImage)
+        let button = Button {
+            taps += 1
+            action()
+        } label: {
+            ButtonTitle(title: title, systemImage: systemImage)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(PillButtonStyle())
+        .buttonStyle(PrimaryButtonStyle(isFloating: isFloating))
+        .sensoryFeedback(.impact(weight: .light), trigger: taps)
+
+        button
+    }
+}
+
+/// The primary action: a solid accent capsule, like the play button. Floating over content it also takes a clear Liquid Glass layer,
+/// for the system's light and touch response.
+struct PrimaryButtonStyle: ButtonStyle {
+    var isFloating = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let label = configuration.label
+            .font(.body.weight(.semibold))
+            // Disabled, it goes system gray, as a prominent button does,
+            // rather than a faded orange that still looks tappable.
+            .foregroundStyle(isEnabled ? Color.white : Color(.tertiaryLabel))
+            .padding(.horizontal, AppTheme.Spacing.lg)
+            .frame(minHeight: 50)
+            .background(isEnabled ? AppTheme.buttonFill : Color(.systemGray5), in: Capsule())
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+
+        if isFloating {
+            label.glassEffect(.clear.interactive(), in: .capsule)
+        } else {
+            label
+        }
     }
 }
 
@@ -341,35 +730,41 @@ struct PrimaryLink: View {
 
     var body: some View {
         NavigationLink(value: route) {
-            PillLabel(title: title, systemImage: systemImage)
+            ButtonTitle(title: title, systemImage: systemImage)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(PillButtonStyle())
+        .buttonStyle(PrimaryButtonStyle())
     }
 }
 
 struct SecondaryButton: View {
     let title: String
     let action: () -> Void
+    @Environment(\.isFloatingControl) private var isFloating
 
     var body: some View {
-        Button(action: action) {
+        let button = Button(action: action) {
             Text(title)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(PillButtonStyle(isProminent: false))
+        .controlSize(.large)
+
+        if isFloating {
+            button.buttonStyle(.glass)
+        } else {
+            button.buttonStyle(.bordered)
+        }
     }
 }
 
-private struct PillLabel: View {
+private struct ButtonTitle: View {
     let title: String
     let systemImage: String?
 
     var body: some View {
-        HStack(spacing: AppTheme.Spacing.xs) {
-            if let systemImage {
-                Image(systemName: systemImage)
-            }
+        if let systemImage {
+            Label(title, systemImage: systemImage)
+        } else {
             Text(title)
         }
     }
@@ -377,19 +772,57 @@ private struct PillLabel: View {
 
 /// Pins primary actions above the tab bar so they never scroll away. Place it
 /// with `safeAreaBar` so content scrolling beneath gets the system edge blur.
+/// The buttons inside are Liquid Glass, sharing one container so they blend
+/// and morph together.
 struct BottomActions<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(spacing: AppTheme.Spacing.sm) {
-            content
+        GlassEffectContainer(spacing: AppTheme.Spacing.sm) {
+            VStack(spacing: AppTheme.Spacing.sm) {
+                content
+            }
         }
+        .environment(\.isFloatingControl, true)
         .padding(.horizontal, AppTheme.Spacing.md)
         .padding(.vertical, AppTheme.Spacing.sm)
     }
 }
 
 // MARK: - Fields
+
+/// A search field drawn like the system's, for screens whose header is in
+/// the page rather than the navigation bar.
+struct SearchField: View {
+    let prompt: String
+    @Binding var text: String
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(prompt, text: $text)
+                .focused($isFocused)
+                .submitLabel(.search)
+                .autocorrectionDisabled()
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                        .tapTarget(14)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(AppTheme.fill, in: Capsule())
+    }
+}
 
 /// A typed-in value with its name beside it, as in Settings, so a filled-in
 /// field still says what it is.
@@ -419,9 +852,9 @@ enum AnswerState: Equatable {
     case captured
 }
 
-/// One wide control for answering out loud. Its label always says what is
-/// happening, so state never relies on color or animation alone. Red while
-/// recording — the convention from Voice Memos.
+/// One wide Liquid Glass control for answering out loud. Its label always
+/// says what is happening, so state never relies on color or animation alone.
+/// Red while recording — the convention from Voice Memos.
 struct RecordingControl: View {
     let state: AnswerState
     let action: () -> Void
@@ -429,12 +862,20 @@ struct RecordingControl: View {
     var body: some View {
         Button(action: action) {
             label
-                .font(.app(.subheadline, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(foreground)
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .background(background, in: Capsule())
+                // Ready, it wears the same fill as every primary button.
+                .background {
+                    if state == .ready {
+                        Capsule().fill(AppTheme.buttonFill)
+                    }
+                }
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .glassEffect(glass, in: .capsule)
+        .animation(.smooth(duration: 0.25), value: state)
         .disabled(!isEnabled)
         .accessibilityLabel(accessibilityLabel)
         .sensoryFeedback(.impact(weight: .medium), trigger: isRecording)
@@ -445,10 +886,9 @@ struct RecordingControl: View {
     private var label: some View {
         switch state {
         case .ready:
-            Label("Start Answering", systemImage: "mic")
+            Text("Speak")
         case .recording(let startedAt):
             HStack(spacing: AppTheme.Spacing.xs) {
-                Image(systemName: "stop.fill")
                 Text("Finish")
                 Text(startedAt, style: .timer)
                     .monospacedDigit()
@@ -466,18 +906,18 @@ struct RecordingControl: View {
 
     private var foreground: Color {
         switch state {
-        case .ready: AppTheme.onInk
-        case .recording: .white
+        case .ready, .recording: .white
         case .processing: .secondary
         case .captured: AppTheme.success
         }
     }
 
-    private var background: Color {
+    /// Tinted glass while it can be tapped; clear glass while it waits.
+    private var glass: Glass {
         switch state {
-        case .ready: AppTheme.ink
-        case .recording: AppTheme.record
-        case .processing, .captured: AppTheme.chip
+        case .ready: .clear.interactive()
+        case .recording: .regular.tint(AppTheme.record).interactive()
+        case .processing, .captured: .regular
         }
     }
 
@@ -502,43 +942,26 @@ struct RecordingControl: View {
 
 // MARK: - Indicators
 
-/// A symbol on a white disc, for list rows.
-struct IconTile: View {
-    let systemImage: String
-    var tint: Color = .primary
-    var size: CGFloat = 34
-
-    var body: some View {
-        IconChip(systemImage: systemImage, tint: tint, size: size)
-    }
-}
-
-/// The day of an event at a glance, as on a calendar page. Highlighted, it
-/// fills with the accent the way Calendar marks today.
+/// The day of an event at a glance, as on a calendar page: the month in
+/// small capitals over a bold day number, on a quiet gray tile.
 struct DateTile: View {
     let date: Date?
-    var isHighlighted = false
 
     var body: some View {
-        // Negative spacing closes the gap the fonts' line heights leave.
+        // Negative spacing closes the gap the font's line heights leave.
         VStack(spacing: -4) {
             Text(date?.formatted(.dateTime.month(.abbreviated)) ?? "TBC")
-                .font(.app(.caption2, weight: .bold))
+                .font(.caption2.weight(.bold))
                 .textCase(.uppercase)
-                .foregroundStyle(isHighlighted ? Color.white.opacity(0.85) : Color.secondary)
+                .foregroundStyle(.secondary)
             if let date {
                 Text(date.formatted(.dateTime.day()))
-                    .font(.app(.title2, weight: .bold).monospacedDigit().leading(.tight))
-                    .foregroundStyle(isHighlighted ? Color.white : Color.primary)
+                    .font(.title2.weight(.bold).monospacedDigit().leading(.tight))
+                    .foregroundStyle(Color.primary)
             }
         }
         .frame(width: 60, height: 60)
-        .background(
-            isHighlighted
-                ? LinearGradient(colors: [AppTheme.peach, AppTheme.brand], startPoint: .top, endPoint: .bottom)
-                : LinearGradient(colors: [AppTheme.chip, AppTheme.blush], startPoint: .top, endPoint: .bottom),
-            in: RoundedRectangle(cornerRadius: AppTheme.Radius.control + 2)
-        )
+        .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: AppTheme.Radius.control + 2, style: .continuous))
         .accessibilityHidden(true)
     }
 }
@@ -547,7 +970,6 @@ struct DateTile: View {
 struct ScoreBar: View {
     let title: String
     let score: Int
-    var tint: Color = AppTheme.brand
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
@@ -555,41 +977,26 @@ struct ScoreBar: View {
                 Text(title)
                 Spacer()
                 Text("\(score)")
-                    .font(.app(.headline).monospacedDigit())
+                    .font(.headline.monospacedDigit())
             }
-            GeometryReader { proxy in
-                Capsule()
-                    .fill(AppTheme.track)
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(LinearGradient(colors: [AppTheme.peach, tint], startPoint: .leading, endPoint: .trailing))
-                            .frame(width: proxy.size.width * CGFloat(min(max(score, 0), 100)) / 100)
-                    }
-            }
-            .frame(height: 6)
-            .accessibilityHidden(true)
+            ProgressView(value: Double(min(max(score, 0), 100)), total: 100)
+                .tint(AppTheme.graphic)
+                .accessibilityHidden(true)
         }
         .accessibilityElement(children: .combine)
     }
 }
 
-/// Progress through a fixed number of steps: the current one long and dark,
-/// the rest short.
+/// Progress through a fixed number of steps.
 struct SegmentedProgress: View {
     let total: Int
-    /// Steps fully done. The step at this index is the current one.
+    /// Steps fully done.
     let completed: Int
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<max(total, 1), id: \.self) { index in
-                Capsule()
-                    .fill(index <= completed ? AppTheme.ink : AppTheme.track)
-                    .opacity(index < completed ? 0.35 : 1)
-                    .frame(width: index == completed ? 28 : 18, height: 4)
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: completed)
+        ProgressView(value: Double(min(completed, total)), total: Double(max(total, 1)))
+            .tint(AppTheme.brand)
+            .animation(.easeInOut(duration: 0.25), value: completed)
     }
 }
 
@@ -598,21 +1005,28 @@ struct SegmentedProgress: View {
 struct QuestionRow: View {
     let question: Question
     var isPracticed = false
+    /// Bold by default; a screen can match its own heading weight instead.
+    var font: Font = .questionRow
+    /// Ends the gray line with a full stop, as the Questions page writes it.
+    var endsWithPeriod = false
+    /// Shows "Practiced" right-aligned on the gray line, as Mail puts a
+    /// message's date on the right, instead of straight after the gray text.
+    /// The question above keeps the row's full width.
+    var practicedOnTrailing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
             // Explicit colors: inside a list Button, hierarchical styles take the tint.
             Text(question.text)
+                .font(font)
                 .foregroundStyle(Color.primary)
-            HStack(spacing: AppTheme.Spacing.xs) {
-                Text(question.metaText)
-                    .font(.app(.footnote))
+            HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.xs) {
+                Text(endsWithPeriod ? question.metaText + "." : question.metaText)
+                    .font(.subheadline)
                     .foregroundStyle(Color.secondary)
                 if isPracticed {
-                    Label("Practiced", systemImage: "checkmark.circle.fill")
-                        .font(.app(.footnote, weight: .medium))
-                        .foregroundStyle(AppTheme.success)
-                        .labelStyle(.titleAndIcon)
+                    if practicedOnTrailing { Spacer(minLength: AppTheme.Spacing.xs) }
+                    PracticedLabel()
                 }
             }
         }
@@ -625,22 +1039,60 @@ struct RehearsalRow: View {
 
     var body: some View {
         HStack(spacing: AppTheme.Spacing.sm) {
-            IconTile(systemImage: rehearsal.kind == .interview ? "person.wave.2" : "mic")
             VStack(alignment: .leading, spacing: 2) {
                 Text(rehearsal.title)
-                    .font(.app(.subheadline, weight: .semibold))
+                    // A practice entry's title is the question itself.
+                    .font(rehearsal.kind == .practice ? .questionRow : .rowTitle)
                     .lineLimit(2)
                 Text(rehearsal.subtitle)
-                    .font(.app(.footnote))
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondary)
             }
             Spacer(minLength: AppTheme.Spacing.xs)
             if let score = rehearsal.score {
                 Text("\(score)")
-                    .font(.app(.title3, weight: .bold).monospacedDigit())
+                    .font(.rowScore)
+                    .foregroundStyle(.secondary)
                     .accessibilityLabel("Score \(score)")
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A detail line with its symbol, as Calendar lists an event's time and
+/// place: every symbol centered in the same narrow column, in the text's
+/// own gray, so the lines of text start on one edge.
+struct DetailLabelStyle: LabelStyle {
+    /// A color for the symbol alone; nil keeps the text's.
+    var iconColor: Color?
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: AppTheme.Spacing.xs) {
+            Group {
+                if let iconColor {
+                    configuration.icon.foregroundStyle(iconColor)
+                } else {
+                    configuration.icon
+                }
+            }
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            configuration.title
+        }
+    }
+}
+
+/// The one way the app marks something as practiced: the word alone,
+/// bold and green. No icon, so it reads as part of the line rather than a
+/// badge. `text` can add when ("Practiced 2 days ago").
+struct PracticedLabel: View {
+    var text = "Practiced"
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(AppTheme.practiced)
+            .lineLimit(1)
     }
 }

@@ -3,8 +3,9 @@ import SwiftUI
 /// Adds one of the candidate's real upcoming interviews, or reschedules one.
 /// Only the facts that change the rehearsal are asked for; experience level
 /// comes from the candidate, and rehearsal length is chosen at setup. Once
-/// added, an interview's company, role and type are fixed — rehearsals already
-/// done were for that interview — so only its date and time can change.
+/// added, an interview's company, role, type and time are fixed, since
+/// rehearsals already done were for that interview, so only its date can
+/// change.
 struct UpcomingInterviewEditor: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -44,15 +45,21 @@ struct UpcomingInterviewEditor: View {
                         LabeledContent("Role", value: draft.role)
                         LabeledContent("Interview Type", value: draft.type.rawValue)
                     } footer: {
-                        Group {
-                            Text("To change these, remove the interview and add it again.")
-                        }
-                        .font(.app(.footnote))
+                        Text("To change these, remove the interview and add it again.")
                     }
                 }
 
                 Section {
-                    DatePicker("Date", selection: date, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("Date", selection: day, in: Calendar.current.startOfDay(for: .now)..., displayedComponents: .date)
+                    if isNew {
+                        DatePicker("Time", selection: date, displayedComponents: .hourAndMinute)
+                    } else {
+                        // Set when it was added, and locked after that.
+                        LabeledContent("Time") {
+                            Label(draft.date?.formatted(date: .omitted, time: .shortened) ?? "", systemImage: "lock.fill")
+                                .labelStyle(TrailingIconLabelStyle())
+                        }
+                    }
                 }
 
                 if !isNew {
@@ -61,15 +68,11 @@ struct UpcomingInterviewEditor: View {
                             isConfirmingRemoval = true
                         }
                     } footer: {
-                        Group {
-                            Text("Your past rehearsals stay in History.")
-                        }
-                        .font(.app(.footnote))
+                        Text("Your past rehearsals stay in History.")
                     }
                 }
             }
-            .contentMargins(.top, AppTheme.Spacing.sm, for: .scrollContent)
-            .warmBackground()
+            .appListStyle()
             .navigationTitle(isNew ? "Add Interview" : "Edit Interview")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -106,6 +109,30 @@ struct UpcomingInterviewEditor: View {
 
     private var date: Binding<Date> {
         Binding(get: { draft.date ?? .now }, set: { draft.date = $0 })
+    }
+
+    /// A new day keeps the interview's time.
+    private var day: Binding<Date> {
+        Binding(
+            get: { draft.date ?? .now },
+            set: { newDay in
+                let calendar = Calendar.current
+                let time = calendar.dateComponents([.hour, .minute], from: draft.date ?? .now)
+                draft.date = calendar.date(bySettingHour: time.hour ?? 9, minute: time.minute ?? 0, second: 0, of: newDay) ?? newDay
+            }
+        )
+    }
+}
+
+/// The text, then a small gray symbol after it.
+private struct TrailingIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.title
+            configuration.icon
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+        }
     }
 }
 

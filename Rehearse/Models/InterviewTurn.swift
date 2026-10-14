@@ -6,7 +6,7 @@ import Foundation
 struct InterviewTurn: Identifiable, Hashable {
     let id: String
     let question: String
-    /// Where the question came from, e.g. "From your resume · Finlo internship".
+    /// Where the question came from, e.g. "About your Finlo internship".
     var origin: String?
     /// The answer the prototype pretends it heard, shown as a transcript.
     let mockAnswer: String
@@ -29,5 +29,9 @@ struct InterviewTurn: Identifiable, Hashable {
 
         let kind: Kind
         let note: String
+        /// The same, in a few words, for the Insights list.
+        var short: String? = nil
+
+        var headline: String { short ?? note }
     }
 }

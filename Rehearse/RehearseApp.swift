@@ -4,18 +4,29 @@ import SwiftUI
 struct RehearseApp: App {
     @State private var appState = AppState()
 
-    init() {
-        AppFont.register()
-    }
-
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(appState)
-                .tint(AppTheme.ink)
-                .font(.app(.body))
-                // Jakarta sets tight; a little leading keeps wrapped lines readable.
-                .lineSpacing(2)
+            // First launch: a welcome, then an account, then the profile a
+            // new account sets up, then the app.
+            Group {
+                if !appState.isSignedIn {
+                    if appState.hasSeenWelcome {
+                        LoginView()
+                            .transition(.opacity)
+                    } else {
+                        WelcomeView()
+                            .transition(.opacity)
+                    }
+                } else if appState.needsProfileSetup {
+                    ProfileSetupView()
+                        .transition(.opacity)
+                } else {
+                    RootView()
+                        .transition(.opacity)
+                }
+            }
+            .environment(appState)
+            .tint(AppTheme.brand)
         }
     }
 }

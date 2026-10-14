@@ -1,58 +1,48 @@
-import CoreText
 import SwiftUI
-import UIKit
 
-/// Shared visual tokens for Rehearse: a warm, calm canvas with milky cards,
-/// ink-dark actions and a peach-orange accent reserved for progress and the
-/// one thing that matters next.
+/// Shared visual tokens for Rehearse. Everything leans on the system: San
+/// Francisco at Dynamic Type sizes, semantic grouped backgrounds, and system
+/// colors that adapt to dark mode and Increase Contrast on their own. One
+/// accent tints actions, progress and the one thing that matters next.
 enum AppTheme {
     // MARK: - Color
 
-    /// Peach-orange accent: rings, active bars, the next interview, links.
-    static let brand = Color.adaptive(light: 0xD8642E, dark: 0xF39A62)
-    /// Recording, and nothing else — the convention from Voice Memos.
-    static let record = Color.red
-    static let success = Color.adaptive(light: 0x2F8A57, dark: 0x6CCB93)
+    /// Peach-orange accent: buttons, links, rings, the next interview.
+    /// Every color that draws text clears WCAG AA, 4.5:1, on both the card
+    /// and the grouped page behind it, in light and dark mode.
+    static let brand = Color.adaptive(light: 0xB5501E, dark: 0xE8743A)
+    /// Rings, bars and artwork carry no text, so they keep the brighter
+    /// orange (3:1 is the bar for graphics).
+    static let graphic = Color.adaptive(light: 0xD8642E, dark: 0xE8743A)
+    /// Behind primary buttons and the play disc, deep enough for white text
+    /// at 4.5:1 in both modes.
+    static let buttonFill = Color(hex: 0xB5501E)
+    /// The lighter top of the profile picture's disc, which shades down to
+    /// `buttonFill` like the app icon's tie.
+    static let avatarTop = Color(hex: 0xE07A3F)
+    /// Behind the suit on the dock's mock interview button: the app icon's
+    /// own background, white or its dark-mode brown, so the button looks
+    /// like the icon and its tie stands out.
+    static let iconFill = Color.adaptive(light: 0xFFFFFF, dark: 0x3A2E27)
+    /// Recording, and nothing else, the convention from Voice Memos.
+    static let record = Color.adaptive(light: 0xCC2419, dark: 0xFF6961)
+    static let success = Color.adaptive(light: 0x1E7B34, dark: 0x30D158)
+    /// A brighter green for the "Practiced" word, Apple's own system green
+    /// for text on white (bold, so it still reads).
+    static let practiced = Color.adaptive(light: 0x248A3D, dark: 0x30D158)
 
-    /// Pill buttons: near-black on the light canvas, cream on the dark one.
-    static let ink = Color.adaptive(light: 0x1F1B18, dark: 0xF4ECE2)
-    /// The lit top edge of an ink pill.
-    static let inkHighlight = Color.adaptive(light: 0x4A4440, dark: 0xFFFFFF)
-    /// The light end of the accent gradient.
-    static let peach = Color.adaptive(light: 0xF7B98E, dark: 0xF8C29C)
-    /// A blush tint for quiet tiles.
-    static let blush = Color.adaptive(light: 0xF8E4DC, lightAlpha: 1, dark: 0xFFFFFF, darkAlpha: 0.06)
-    /// The shaded foot of a quiet chart bar.
-    static let barShade = Color.adaptive(light: 0xE6DDD3, lightAlpha: 1, dark: 0xFFFFFF, darkAlpha: 0.10)
-    static let onInk = Color.adaptive(light: 0xFFFFFF, dark: 0x1F1B18)
+    /// The page behind cards, as in Settings and Health.
+    static let background = Color(.systemGroupedBackground)
+    /// A card on that page.
+    static let cardFill = Color(.secondarySystemGroupedBackground)
+    /// Quiet fills inside a card: tiles, tracks, inactive states.
+    static let fill = Color(.tertiarySystemFill)
+    static let track = Color(.systemFill)
 
-    /// The warm canvas behind everything.
-    static let canvasTop = Color.adaptive(light: 0xFBF6EF, dark: 0x17130F)
-    static let canvasBottom = Color.adaptive(light: 0xF6E7D6, dark: 0x1E1611)
-    /// Soft light pooling at the bottom of the canvas.
-    static let glowPeach = Color.adaptive(light: 0xF8B98C, dark: 0x7A3E1C)
-    static let glowRose = Color.adaptive(light: 0xF5B5B8, dark: 0x5A2730)
+    /// Kept for call sites that distinguish categories.
+    static let focus = brand
+    static let results = Color.blue
 
-    /// Milky card fill and its fine edge.
-    static let cardFill = Color.adaptive(light: 0xFFFFFF, lightAlpha: 0.5, dark: 0xFFFFFF, darkAlpha: 0.07)
-    static let cardEdge = Color.adaptive(light: 0xFFFFFF, lightAlpha: 0.9, dark: 0xFFFFFF, darkAlpha: 0.10)
-    /// White discs behind icons and small controls.
-    static let chip = Color.adaptive(light: 0xFFFFFF, lightAlpha: 1, dark: 0xFFFFFF, darkAlpha: 0.12)
-    /// Recessed tracks: unfilled bars, inactive steps.
-    static let track = Color.adaptive(light: 0x1F1B18, lightAlpha: 0.08, dark: 0xFFFFFF, darkAlpha: 0.12)
-
-    /// Kept for call sites that distinguish categories; in this palette they
-    /// read as ink, so only progress and the next step carry color.
-    static let focus = Color.primary
-    static let results = Color.primary
-
-    // MARK: - Type
-
-    /// The interviewer's words: the app's face at a heavier weight, so the
-    /// question leads without a second typeface.
-    static func question(_ style: Font.TextStyle = .title2) -> Font {
-        .app(style, weight: .semibold)
-    }
 
     // MARK: - Layout
 
@@ -64,100 +54,77 @@ enum AppTheme {
         static let lg: CGFloat = 20
         static let xl: CGFloat = 24
         static let xxl: CGFloat = 32
+        /// Where page titles and section headings start, from the screen edge.
+        static let headingMargin: CGFloat = 24
     }
 
     enum Radius {
         static let tile: CGFloat = 10
         static let control: CGFloat = 14
-        static let card: CGFloat = 22
-    }
-}
-
-// MARK: - Typeface
-
-/// Plus Jakarta Sans, bundled under the SIL Open Font License (see
-/// Resources/Fonts/OFL.txt). Sizes follow Dynamic Type through `relativeTo`.
-enum AppFont {
-    /// Registers the bundled faces for this process, so no Info.plist entry is needed.
-    static func register() {
-        for url in Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? [] {
-            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-        }
-        styleNavigationBars()
-    }
-
-    nonisolated static func name(for weight: Font.Weight) -> String {
-        switch weight {
-        case .black, .heavy: "PlusJakartaSans-ExtraBold"
-        case .bold: "PlusJakartaSans-Bold"
-        case .semibold: "PlusJakartaSans-SemiBold"
-        case .medium: "PlusJakartaSans-Medium"
-        default: "PlusJakartaSans-Regular"
-        }
-    }
-
-    nonisolated static func size(for style: Font.TextStyle) -> CGFloat {
-        switch style {
-        // A step under the system sizes: Jakarta's large x-height reads bigger.
-        case .largeTitle: 28
-        case .title: 24
-        case .title2: 20
-        case .title3: 17
-        case .headline, .body: 15
-        case .callout: 14
-        case .subheadline: 13
-        case .footnote: 12
-        case .caption: 11
-        case .caption2: 10
-        default: 17
-        }
-    }
-
-    /// Navigation titles are drawn by UIKit, so they take the face here.
-    private static func styleNavigationBars() {
-        let appearance = UINavigationBar.appearance()
-        if let title = UIFont(name: name(for: .semibold), size: 15) {
-            appearance.titleTextAttributes = [.font: UIFontMetrics(forTextStyle: .headline).scaledFont(for: title)]
-        }
-        if let large = UIFont(name: name(for: .bold), size: 28) {
-            appearance.largeTitleTextAttributes = [.font: UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: large)]
-        }
-    }
-}
-
-extension Font {
-    /// The app's typeface at a Dynamic Type style. Headline defaults to semibold, as the system's does.
-    static func app(_ style: Font.TextStyle, weight: Font.Weight? = nil) -> Font {
-        let resolved = weight ?? (style == .headline ? .semibold : .regular)
-        return .custom(AppFont.name(for: resolved), size: AppFont.size(for: style), relativeTo: style)
+        /// Matches inset-grouped list rows.
+        static let card: CGFloat = 26
     }
 }
 
 private extension Color {
+    nonisolated init(hex: UInt) {
+        self.init(uiColor: UIColor(rgb: hex))
+    }
+
     /// Dynamic UIKit colors are resolved off the main actor by SwiftUI's
     /// renderer, so the provider must be nonisolated.
     nonisolated static func adaptive(light: UInt, dark: UInt) -> Color {
-        adaptive(light: light, lightAlpha: 1, dark: dark, darkAlpha: 1)
-    }
-
-    nonisolated static func adaptive(light: UInt, lightAlpha: CGFloat, dark: UInt, darkAlpha: CGFloat) -> Color {
         Color(
             uiColor: UIColor { traits in
-                traits.userInterfaceStyle == .dark
-                    ? UIColor(rgb: dark, alpha: darkAlpha)
-                    : UIColor(rgb: light, alpha: lightAlpha)
+                traits.userInterfaceStyle == .dark ? UIColor(rgb: dark) : UIColor(rgb: light)
             }
         )
     }
 }
 
 private extension UIColor {
-    nonisolated convenience init(rgb: UInt, alpha: CGFloat) {
+    nonisolated convenience init(rgb: UInt) {
         self.init(
             red: CGFloat((rgb >> 16) & 0xFF) / 255,
             green: CGFloat((rgb >> 8) & 0xFF) / 255,
             blue: CGFloat(rgb & 0xFF) / 255,
-            alpha: alpha
+            alpha: 1
         )
+    }
+}
+
+
+/// The app's type scale. Every screen uses these names, so the same kind of
+/// text is always the same size and weight. All San Francisco, all Dynamic Type.
+extension Font {
+    /// "Rehearse.", "Practice", "History".
+    static let pageTitle = Font.largeTitle.weight(.bold)
+    /// "Upcoming Interviews", "Recent Interviews".
+    static let sectionTitle = Font.title3.weight(.bold)
+    /// The one name a card is about: "Apple", "Answer Structure".
+    static let cardTitle = Font.title2.weight(.bold)
+    // Questions are semibold at every size, the weight of the section
+    // headings, so the question is always the first thing you read.
+    /// A question on the screen that is about it: live, practice, detail.
+    /// Title 2, tightly led: at Title size iOS 26 spaces lines so far apart
+    /// that a two-line question read as two headlines. Semibold, the weight
+    /// of the section headings.
+    static let questionLarge = Font.title2.weight(.semibold).leading(.tight)
+    /// A question inside a card among others.
+    static let questionInCard = Font.title3.weight(.semibold)
+    /// A question as the first line of a row.
+    static let questionRow = Font.body.weight(.semibold)
+    /// A label above content, in secondary gray: "Score Breakdown".
+    static let label = Font.subheadline.weight(.semibold)
+    /// The first line of a row: "Software Engineer at Apple".
+    static let rowTitle = Font.headline
+    /// A score at the end of a row.
+    static let rowScore = Font.headline.monospacedDigit()
+}
+
+extension View {
+    /// A card title, at the system's own line spacing.
+    func cardTitleStyle() -> some View {
+        font(.cardTitle)
     }
 }

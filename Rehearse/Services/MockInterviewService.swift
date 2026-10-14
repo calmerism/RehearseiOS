@@ -28,6 +28,9 @@ final class MockInterviewService {
     private(set) var transcript: [TranscriptEntry] = []
     /// Shown when an answer couldn't be captured, e.g. it was too short.
     private(set) var notice: String?
+    /// Main questions answered, and ones skipped, by turn.
+    private(set) var answeredTurnIDs: [String] = []
+    private(set) var skippedTurnIDs: [String] = []
 
     /// Answers shorter than this are treated as a failed recording.
     private let minimumAnswerSeconds: TimeInterval = 2
@@ -53,11 +56,23 @@ final class MockInterviewService {
         return transcript.last?.answer
     }
 
-    /// Main topics the candidate has answered (follow-ups don't count).
+    /// Main topics the candidate has answered (follow-ups don't count);
+    /// skipped ones aren't among them, so they aren't scored.
     var answeredTurns: [InterviewTurn] {
-        let answered = transcript.filter { !$0.isFollowUp }.count
-        return Array(turns.prefix(answered))
+        turns.filter { answeredTurnIDs.contains($0.id) }
     }
+
+    /// Where a question stands, for the list of questions.
+    enum TurnStatus { case answered, skipped, current, upcoming }
+
+    func status(ofTurn index: Int) -> TurnStatus {
+        let id = turns[index].id
+        if answeredTurnIDs.contains(id) && index != turnIndex { return .answered }
+        if skippedTurnIDs.contains(id) { return .skipped }
+        if index == turnIndex && phase != .finished { return .current }
+        return index < turnIndex ? .answered : .upcoming
+    }
+
 
     var progress: Double {
         guard !turns.isEmpty else { return 0 }
@@ -97,7 +112,16 @@ final class MockInterviewService {
         guard phase == .processing else { return }
 
         let answer = isFollowUp ? (turn.followUp?.mockAnswer ?? "") : turn.mockAnswer
-        transcript.append(TranscriptEntry(question: currentQuestion ?? "", answer: answer, isFollowUp: isFollowUp))
+        if !isFollowUp { answeredTurnIDs.append(turn.id) }
+        transcript.append(TranscriptEntry(
+            question: currentQuestion ?? "",
+            answer: answer,
+            isFollowUp: isFollowUp,
+            moment: isFollowUp ? nil : turn.moment,
+            // Heard partly in Hindi: kept as said, with each Hindi line's English.
+            spokenAnswer: MockData.mixedAnswers[answer]?.said,
+            hindiLines: MockData.mixedAnswers[answer]?.lines ?? []
+        ))
         phase = .captured
 
         try? await Task.sleep(for: .seconds(1.8))
@@ -122,28 +146,33 @@ final class MockInterviewService {
     /// questions for ones about the candidate's own work, company adds a short
     /// motivation question, and duration sets how many topics fit.
     static func plan(for interview: Interview, resume: ResumeContext?) -> [InterviewTurn] {
-        let usesResume = resume != nil
+        // A tailored resume puts its lead project first, so the interview does too.
+        let projectTurns: [InterviewTurn] = (resume?.highlights ?? []).compactMap { highlight in
+            switch highlight.id {
+            case "finlo": MockData.financePaymentsTurn
+            case "campus-eats": MockData.campusEatsTurn
+            default: nil
+            }
+        }
+        let mentionsFinlo = resume?.highlights.contains { $0.id == "finlo" } ?? false
         var topics: [InterviewTurn]
 
         switch interview.type {
         case .technical:
-            topics = usesResume
-                ? [MockData.financePaymentsTurn, MockData.roleTurn(for: interview.role), MockData.campusEatsTurn, MockData.debuggingTurn, MockData.decisionTurn]
-                : [MockData.cachingTurn, MockData.roleTurn(for: interview.role), MockData.debuggingTurn, MockData.decisionTurn]
-        case .behavioral:
+            topics = projectTurns.isEmpty
+                ? [MockData.cachingTurn, MockData.roleTurn(for: interview.role), MockData.debuggingTurn, MockData.decisionTurn]
+                : [projectTurns[0], MockData.roleTurn(for: interview.role)] + projectTurns.dropFirst() + [MockData.debuggingTurn, MockData.decisionTurn]
+        case .nonTechnical:
             topics = [
-                usesResume ? MockData.finloDisagreementTurn : MockData.disagreementTurn,
+                mentionsFinlo ? MockData.finloDisagreementTurn : MockData.disagreementTurn,
                 MockData.deadlineTurn,
                 MockData.setbackTurn,
                 MockData.feedbackTurn
             ]
-        case .systemDesign:
-            topics = [MockData.shortenerTurn, MockData.viralLinkTurn, MockData.analyticsTurn]
-            if usesResume { topics.insert(MockData.finloScaleTurn, at: 2) }
         }
 
         let capacity = topicCapacity(forMinutes: interview.durationMinutes)
-        if let company = interview.company, interview.type != .systemDesign {
+        if let company = interview.company {
             return Array(topics.prefix(capacity - 1)) + [MockData.motivationTurn(company: company)]
         }
         return Array(topics.prefix(capacity))

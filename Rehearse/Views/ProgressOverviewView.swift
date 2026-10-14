@@ -1,8 +1,9 @@
+import Charts
 import SwiftUI
 
-/// Answers "is practice working?": how much rehearsing is happening, how the
-/// score has moved since the first interview, whether the same weakness keeps
-/// coming back, and which part of the score moved.
+/// Answers "is practice working?": how the score has moved across every
+/// interview, how much rehearsing is happening, whether the same weakness
+/// keeps coming back, and which part of the score moved.
 struct ProgressOverviewView: View {
     @Environment(AppState.self) private var appState
 
@@ -15,9 +16,8 @@ struct ProgressOverviewView: View {
         Group {
             if interviews.count >= 2 {
                 ReportScroll {
+                    scoreTrendCard
                     weeklyCard
-                    statStrip
-                    firstVersusLatestCard
                     patternSection
                     scoresSection
                 }
@@ -28,11 +28,10 @@ struct ProgressOverviewView: View {
                     description: Text("Do two interviews and your progress will show up here.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(WarmBackground())
+                .groupedBackground()
             }
         }
-        .navigationTitle("Your progress")
-        .navigationBarTitleDisplayMode(.inline)
+        .scrollingTitle("Progress", inList: false)
     }
 
     // MARK: - This week
@@ -56,21 +55,25 @@ struct ProgressOverviewView: View {
     }
 
     /// The week as a row of days, as in Fitness: a filled day is one you
-    /// rehearsed on, with how many sessions; today is outlined.
+    /// rehearsed on; the total sits in the header, so the days carry no
+    /// numbers. Today's date is in the accent.
     private var weeklyCard: some View {
         let days = week
         let total = days.reduce(0) { $0 + $1.count }
         return VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
             HStack(alignment: .firstTextBaseline) {
-                Text("This week")
-                    .font(.app(.subheadline))
+                Label("This Week", systemImage: "calendar")
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("\(total)")
-                    .font(.app(.headline, weight: .bold).monospacedDigit())
-                + Text(total == 1 ? " session" : " sessions")
-                    .font(.app(.footnote))
-                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.xxs) {
+                    Text("\(total)")
+                        .font(.headline.weight(.bold).monospacedDigit())
+                    Text(total == 1 ? "session" : "sessions")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
             }
 
             HStack(spacing: 0) {
@@ -89,116 +92,79 @@ struct ProgressOverviewView: View {
         let isActive = day.count > 0
         return VStack(spacing: AppTheme.Spacing.xs) {
             Text(day.date.formatted(.dateTime.weekday(.narrow)))
-                .font(.app(.caption2, weight: isToday ? .bold : .medium))
-                .foregroundStyle(isToday ? Color.primary : Color.secondary)
-            ZStack {
-                if isActive {
-                    Circle()
-                        .fill(LinearGradient(colors: [AppTheme.peach, AppTheme.brand], startPoint: .top, endPoint: .bottom))
-                        .shadow(color: AppTheme.brand.opacity(0.25), radius: 6, y: 3)
-                    Text("\(day.count)")
-                        .font(.app(.footnote, weight: .bold).monospacedDigit())
-                        .foregroundStyle(.white)
-                } else {
-                    Circle()
-                        .fill(AppTheme.chip)
-                        .overlay { Circle().strokeBorder(AppTheme.track, lineWidth: 1) }
-                }
-                if isToday {
-                    Circle()
-                        .strokeBorder(AppTheme.ink, lineWidth: 1.5)
-                        .padding(-4)
-                }
-            }
-            .frame(width: 34, height: 34)
+                .font(.caption2.weight(isToday ? .bold : .medium))
+                .foregroundStyle(isToday ? AppTheme.brand : Color.secondary)
+            Circle()
+                .fill(isActive ? AppTheme.graphic : AppTheme.fill)
+                .frame(width: 30, height: 30)
+            // Today is marked the way Calendar marks it: the date in the accent.
             Text(day.date.formatted(.dateTime.day()))
-                .font(.app(.caption2))
-                .foregroundStyle(.secondary)
+                .font(.caption2.weight(isToday ? .bold : .regular))
+                .foregroundStyle(isToday ? AppTheme.brand : Color.secondary)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(day.date.formatted(.dateTime.weekday(.wide).day().month()))
         .accessibilityValue("\(day.count) \(day.count == 1 ? "session" : "sessions")")
     }
 
-    // MARK: - Totals
+    // MARK: - Score over time
 
-    private var statStrip: some View {
-        let best = interviews.compactMap { $0.feedback?.overall }.max() ?? 0
-        return HStack(spacing: AppTheme.Spacing.sm) {
-            stat("\(appState.rehearsals.count)", label: "Sessions")
-            stat("\(interviews.count)", label: "Interviews")
-            stat("\(best)", label: "Best score")
-        }
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func stat(_ value: String, label: String) -> some View {
-        VStack(spacing: AppTheme.Spacing.xxs) {
-            Text(value)
-                .font(.app(.title, weight: .bold).monospacedDigit())
-            Text(label)
-                .font(.app(.caption))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, AppTheme.Spacing.lg)
-        .padding(.horizontal, AppTheme.Spacing.xs)
-        .cardBackground()
-        .accessibilityElement(children: .combine)
-    }
-
-    // MARK: - First vs latest
-
-    /// Where the candidate started and where they are now, side by side.
+    /// The overall score across every interview, as Health draws a trend:
+    /// the latest value large, the change since the first, a line beneath.
     @ViewBuilder
-    private var firstVersusLatestCard: some View {
-        if let first = interviews.first, let latest = interviews.last,
-           let firstScore = first.feedback?.overall, let latestScore = latest.feedback?.overall {
+    private var scoreTrendCard: some View {
+        if let first = interviews.first?.feedback?.overall, let latest = interviews.last?.feedback?.overall {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("First vs latest")
-                        .font(.app(.subheadline))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(interviews.count)")
-                        .font(.app(.headline, weight: .bold).monospacedDigit())
-                    + Text(" interviews")
-                        .font(.app(.footnote))
-                        .foregroundStyle(.secondary)
+                CardHeader(title: "Overall Score", systemImage: "chart.line.uptrend.xyaxis")
+                VStack(alignment: .leading, spacing: 2) {
+                    BigValue(value: "\(latest)", unit: "latest")
+                    HStack(spacing: AppTheme.Spacing.xxs) {
+                        DeltaText(delta: latest - first)
+                        Text("since your first interview")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                HStack(spacing: AppTheme.Spacing.sm) {
-                    scoreTile(firstScore, date: first.date, isLatest: false)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                    scoreTile(latestScore, date: latest.date, isLatest: true)
-                }
-            }
-            .padding(AppTheme.Spacing.md)
-            .cardBackground()
-            .accessibilityElement(children: .combine)
-        }
-    }
+                .accessibilityElement(children: .combine)
 
-    private func scoreTile(_ score: Int, date: Date, isLatest: Bool) -> some View {
-        VStack(spacing: AppTheme.Spacing.xs) {
-            VStack(spacing: 0) {
-                Text("\(score)")
-                    .font(.app(.largeTitle, weight: .bold).monospacedDigit())
-                    .foregroundStyle(isLatest ? .white : .primary)
+                Chart(interviews) { interview in
+                    if let score = interview.feedback?.overall {
+                        LineMark(
+                            x: .value("Date", interview.date, unit: .day),
+                            y: .value("Score", score)
+                        )
+                        .interpolationMethod(.monotone)
+                        .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .foregroundStyle(AppTheme.brand)
+                        PointMark(
+                            x: .value("Date", interview.date, unit: .day),
+                            y: .value("Score", score)
+                        )
+                        .symbolSize(36)
+                        .foregroundStyle(AppTheme.brand)
+                    }
+                }
+                .chartYScale(domain: 40...100)
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: [40, 60, 80, 100]) {
+                        AxisGridLine()
+                        AxisValueLabel()
+                    }
+                }
+                .chartXAxis {
+                    // Aligned keeps the first and last labels inside the plot.
+                    AxisMarks(preset: .aligned, values: interviews.map(\.date)) { _ in
+                        AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+                    }
+                }
+                .chartXScale(range: .plotDimension(padding: 20))
+                .frame(height: 160)
+                .accessibilityLabel("Overall score over time")
             }
-            .frame(maxWidth: .infinity, minHeight: 104)
-            .background(
-                isLatest
-                    ? LinearGradient(colors: [AppTheme.peach, AppTheme.brand], startPoint: .top, endPoint: .bottom)
-                    : LinearGradient(colors: [AppTheme.chip, AppTheme.blush], startPoint: .top, endPoint: .bottom),
-                in: RoundedRectangle(cornerRadius: AppTheme.Radius.control + 4)
-            )
-            Text(date.formatted(.dateTime.day().month(.abbreviated)))
-                .font(.app(.caption, weight: .medium))
-                .foregroundStyle(.secondary)
+            // Straight on the page, not in a card, as Your Score leads with
+            // its score.
+            .padding(.horizontal, AppTheme.Spacing.md)
+            .padding(.bottom, AppTheme.Spacing.md)
         }
     }
 
@@ -214,64 +180,93 @@ struct ProgressOverviewView: View {
             .filter { $0.1 > 0 }
             .sorted { $0.1 > $1.1 }
 
-        SectionTitle(title: "What keeps coming up")
-        ForEach(flagged, id: \.0) { skill, count in
-            HStack(spacing: AppTheme.Spacing.md) {
-                IconChip(systemImage: "bolt", tint: skill == appState.currentFocus ? AppTheme.brand : .primary, size: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(skill.title)
-                        .font(.app(.headline))
-                    if skill == appState.currentFocus {
-                        Text("Current focus")
-                            .font(.app(.footnote))
+        SectionTitle(title: "What Keeps Coming Up")
+        VStack(spacing: 0) {
+            ForEach(Array(flagged.enumerated()), id: \.element.0) { index, item in
+                let (skill, count) = item
+                if index > 0 { Divider().padding(.leading, AppTheme.Spacing.md) }
+                HStack(spacing: AppTheme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(skill.title)
+                            .font(.headline)
+                        Text(skill == appState.currentFocus ? "Your current focus" : "Came up in \(count) of your last \(recent.count)")
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
-                Text("\(count)")
-                    .font(.app(.title2, weight: .bold).monospacedDigit())
-                + Text("/\(recent.count)")
-                    .font(.app(.footnote, weight: .medium))
-                    .foregroundStyle(.secondary)
+                .padding(.horizontal, AppTheme.Spacing.md)
+                .padding(.vertical, AppTheme.Spacing.sm)
+                .accessibilityElement(children: .combine)
+                .accessibilityValue("Came up in \(count) of your last \(recent.count) interviews")
             }
-            .padding(AppTheme.Spacing.md)
-            .cardBackground()
-            .accessibilityElement(children: .combine)
-            .accessibilityValue("Flagged in \(count) of your last \(recent.count) interviews")
+            if let focus = appState.currentFocus {
+                Divider().padding(.leading, AppTheme.Spacing.md)
+                NavigationLink(value: Route.practice) {
+                    HStack {
+                        Text("Improve \(focus.title)")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(AppTheme.Spacing.md)
+                }
+                .buttonStyle(CardRowButtonStyle())
+                .foregroundStyle(AppTheme.brand)
+            }
         }
-        if appState.currentFocus != nil {
-            PrimaryLink(title: "Practice current focus", systemImage: "mic", route: .practice(nil))
-                .padding(.top, AppTheme.Spacing.xxs)
-        }
+        .cardBackground()
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
     }
 
     // MARK: - Scores
 
+    /// The five areas the score is worked out from, each as a row with the
+    /// latest value on the right and the change beneath it, as Health lists
+    /// its trends.
     @ViewBuilder
     private var scoresSection: some View {
-        SectionTitle(title: "Since your first interview")
-        HStack(alignment: .top, spacing: AppTheme.Spacing.sm) {
-            change("Communication", systemImage: "waveform", trend: appState.trend(\.communication))
-            change("Answer quality", systemImage: "text.badge.checkmark", trend: appState.trend(\.answerQuality))
+        SectionTitle(title: "Since Your First Interview")
+        VStack(spacing: 0) {
+            ForEach(Array(ScoreArea.allCases.enumerated()), id: \.element) { index, area in
+                if index > 0 { Divider().padding(.leading, 52) }
+                change(area, trend: trend(of: area))
+            }
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .cardBackground()
     }
 
-    private func change(_ title: String, systemImage: String, trend: [Int]) -> some View {
-        SummaryCard(title: title, systemImage: systemImage) {
-            if let first = trend.first, let last = trend.last {
-                VStack(alignment: .leading, spacing: 2) {
-                    BigValue(value: "\(last)")
+    /// One area's score in every interview, oldest first.
+    private func trend(of area: ScoreArea) -> [Int] {
+        interviews.compactMap { $0.feedback?.areas.first { $0.area == area }?.score }
+    }
+
+    @ViewBuilder
+    private func change(_ area: ScoreArea, trend: [Int]) -> some View {
+        if let first = trend.first, let last = trend.last {
+            HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
+                Image(systemName: area.symbol)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(AppTheme.graphic)
+                    .frame(width: 24)
+                Text(area.title)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(last)")
+                        .font(.rowScore)
                     HStack(spacing: AppTheme.Spacing.xxs) {
                         DeltaText(delta: last - first)
                         Text("from \(first)")
-                            .font(.app(.caption))
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
+            .padding(.horizontal, AppTheme.Spacing.md)
+            .padding(.vertical, AppTheme.Spacing.sm)
+            .accessibilityElement(children: .combine)
         }
-        .accessibilityElement(children: .combine)
     }
 }
 

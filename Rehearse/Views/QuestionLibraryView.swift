@@ -1,12 +1,16 @@
 import SwiftUI
 
-/// Every practice question. Opened plainly from Home, or narrowed to one skill
-/// when the candidate arrives from feedback looking for questions that build it.
+/// Every practice question, under the candidate's collections: Saved
+/// and their own playlists, as Music's library puts playlists above
+/// songs. Narrowed to one skill when the candidate arrives from feedback
+/// looking for questions that build it; the collections step aside then.
 struct QuestionLibraryView: View {
     @Environment(AppState.self) private var appState
     @State private var searchText = ""
     @State private var category: QuestionCategory?
     @State private var focus: Skill?
+    @State private var difficulty: Difficulty?
+    @State private var naming: PlaylistNameRequest?
 
     init(initialFocus: Skill?) {
         _focus = State(initialValue: initialFocus)
@@ -15,6 +19,7 @@ struct QuestionLibraryView: View {
     private var visibleQuestions: [Question] {
         appState.library.filter { question in
             (category == nil || question.category == category)
+                && (difficulty == nil || question.difficulty == difficulty)
                 && (focus.map { question.skills.contains($0) } ?? true)
                 && (searchText.isEmpty || question.text.localizedCaseInsensitiveContains(searchText))
         }
@@ -22,13 +27,33 @@ struct QuestionLibraryView: View {
 
     var body: some View {
         List {
+            TabHeaderSection()
+
             Section {
-                PillPicker(
-                    options: [nil] + QuestionCategory.allCases.map(Optional.some),
-                    selection: $category
-                ) { $0?.rawValue ?? "All" }
+                SearchField(prompt: "Search questions", text: $searchText)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+            }
+
+            if searchText.isEmpty && focus == nil {
+                collections
+            }
+
+            Section {
+                Picker("Category", selection: $category) {
+                    Text("All").tag(QuestionCategory?.none)
+                    ForEach(QuestionCategory.allCases, id: \.self) { category in
+                        Text(category.rawValue).tag(Optional(category))
+                    }
+                }
+                .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
+            } header: {
+                if focus == nil {
+                    Text("All Questions")
+                        .listHeadingInset()
+                }
             }
 
             if visibleQuestions.isEmpty {
@@ -40,6 +65,7 @@ struct QuestionLibraryView: View {
                     Button("Show All Questions") {
                         searchText = ""
                         category = nil
+                        difficulty = nil
                         focus = nil
                     }
                 }
@@ -48,97 +74,253 @@ struct QuestionLibraryView: View {
                 Section {
                     ForEach(visibleQuestions) { question in
                         NavigationLink(value: Route.question(question)) {
-                            QuestionRow(question: question, isPracticed: !appState.practiceHistory(for: question).isEmpty)
+                            QuestionRow(question: question, isPracticed: !appState.practiceHistory(for: question).isEmpty, font: .headline, endsWithPeriod: true, practicedOnTrailing: true)
                         }
+                        .questionActions(question, naming: $naming)
                     }
                 } header: {
-                    Group {
-                        if let focus {
-                            HStack {
-                                Text("Builds \(focus.title)")
-                                Spacer()
-                                Button("Show all") { self.focus = nil }
-                                    .font(.app(.footnote, weight: .semibold))
-                                    .textCase(nil)
+                    if let focus {
+                        HStack {
+                            Text("Builds \(focus.title)")
+                            Spacer()
+                            // Worded and drawn like every other "See All ›".
+                            Button { self.focus = nil } label: {
+                                HStack(spacing: 3) {
+                                    Text("See All")
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote.weight(.semibold))
+                                }
+                                .tapTarget()
                             }
+                            .textCase(nil)
                         }
+                        .listHeadingInset()
                     }
-                    .font(.app(.footnote, weight: .semibold))
                 }
             }
         }
-        .warmBackground()
-        .navigationTitle("Question Library")
-        .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, prompt: "Search questions")
+        .appListStyle()
+        .screenTitle("Library") {
+            Menu {
+                Picker("Difficulty", selection: $difficulty) {
+                    Text("Any Difficulty").tag(Difficulty?.none)
+                    ForEach(Difficulty.allCases, id: \.self) { Text($0.rawValue).tag(Optional($0)) }
+                }
+            } label: {
+                Image(systemName: difficulty == nil
+                    ? "line.3.horizontal.decrease"
+                    : "line.3.horizontal.decrease.circle.fill")
+            }
+            .accessibilityLabel("Filter by difficulty")
+        }
+        .scrollDismissesKeyboard(.immediately)
+        .playlistNaming($naming)
+    }
+
+    /// Saved, then the candidate's playlists and a way to
+    /// start one, as Music lists playlists.
+    private var collections: some View {
+        Section {
+            NavigationLink(value: Route.collection(.saved)) {
+                CollectionRow(collection: .saved)
+            }
+            ForEach(appState.playlists) { playlist in
+                NavigationLink(value: Route.collection(.playlist(playlist.id))) {
+                    CollectionRow(collection: .playlist(playlist.id))
+                }
+                .swipeActions {
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        withAnimation { appState.deletePlaylist(id: playlist.id) }
+                    }
+                }
+                .contextMenu {
+                    Button("Rename", systemImage: "pencil") {
+                        naming = PlaylistNameRequest(playlistID: playlist.id, name: playlist.name)
+                    }
+                    Button("Delete Playlist", systemImage: "trash", role: .destructive) {
+                        withAnimation { appState.deletePlaylist(id: playlist.id) }
+                    }
+                }
+            }
+            Button {
+                naming = PlaylistNameRequest()
+            } label: {
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(AppTheme.brand)
+                        .frame(width: 48, height: 48)
+                        .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: 48 * 0.2, style: .continuous))
+                    Text("New Playlist")
+                        .foregroundStyle(AppTheme.brand)
+                }
+            }
+        } header: {
+            Text("Collections")
+                .listHeadingInset()
+        }
     }
 }
 
-/// One question before practicing it: what it builds, whether it helps the
-/// current focus, and whether it's been practiced before.
+/// One question before practicing it: why it gets asked, a structure for
+/// the answer, what it builds, and similar questions.
 struct QuestionDetailView: View {
     let question: Question
     @Environment(AppState.self) private var appState
+    @State private var naming: PlaylistNameRequest?
 
     var body: some View {
         List {
+            TabHeaderSection()
+            // One block, as a card: what kind of question it is, the
+            // question, what it builds, then the one action. No separators
+            // between them, so it reads as a single thing.
             Section {
-                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-                    Text(question.text)
-                        .font(AppTheme.question(.title2))
-                        .lineSpacing(2)
-                    Text(question.metaText)
-                        .font(.app(.subheadline))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, AppTheme.Spacing.xxs)
-                .accessibilityElement(children: .combine)
-
-                if let focus = appState.currentFocus, question.skills.contains(focus) {
-                    Label("Good for working on your \(focus.title.lowercased()).", systemImage: "bolt")
-                        .font(.app(.subheadline))
-                        .foregroundStyle(AppTheme.focus)
-                }
-            }
-
-            if !question.skills.isEmpty {
-                Section {
-                    ForEach(question.skills) { skill in
-                        VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
-                            Text(skill.title)
-                            Text(skill.advice)
-                                .font(.app(.footnote))
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                        Text(question.metaText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        // Title 3 semibold, exactly the style of this screen's
+                        // section headings, so they read as one family.
+                        Text(question.text)
+                            .font(.title3.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                        // The current focus when it's one of the skills it
+                        // builds, otherwise every skill it exercises.
+                        if let line = buildsLine {
+                            Text(line)
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-                        .accessibilityElement(children: .combine)
                     }
-                } header: {
-                    Group {
-                        Text("What it builds")
-                            .font(.app(.footnote, weight: .semibold))
+                    .accessibilityElement(children: .combine)
+
+                    PrimaryButton(title: "Practice This Question") {
+                        appState.activePractice = question
                     }
-                    .font(.app(.footnote, weight: .semibold))
                 }
+                .padding(.vertical, AppTheme.Spacing.xs)
+            }
+
+            Section {
+                Text(question.category.whyAsked)
+            } header: {
+                Text("Why Interviewers Ask This")
+                .listHeadingInset()
+            }
+
+            Section {
+                ForEach(Array(question.category.answerStructure.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
+                        Text("\(index + 1)")
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(AppTheme.brand)
+                            .frame(width: 18)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(step.title)
+                                .font(.headline)
+                            Text(step.detail)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            } header: {
+                Text(question.category == .behavioral ? "Suggested Structure (STAR)" : "Suggested Structure")
+                .listHeadingInset()
             }
 
             let history = appState.practiceHistory(for: question)
             if let latest = history.first {
                 Section {
-                    Label("Practiced \(history.count == 1 ? "once" : "\(history.count) times"), last \(latest.date.formatted(.relative(presentation: .named)))", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                    PracticedLabel(text: "Practiced \(latest.date.formatted(.relative(presentation: .named)))")
+                }
+            }
+
+            let similar = appState.library.filter { $0.category == question.category && $0.id != question.id }.prefix(3)
+            if !similar.isEmpty {
+                Section {
+                    ForEach(Array(similar)) { other in
+                        NavigationLink(value: Route.question(other)) {
+                            // Semibold, the weight of this screen's headings.
+                            QuestionRow(question: other, isPracticed: !appState.practiceHistory(for: other).isEmpty, font: .headline, endsWithPeriod: true, practicedOnTrailing: true)
+                        }
+                    }
+                } header: {
+                    Text("More Like This")
+                    .listHeadingInset()
                 }
             }
         }
-        .contentMargins(.top, AppTheme.Spacing.sm, for: .scrollContent)
-        .warmBackground()
-        .navigationTitle("Question")
+        .appListStyle()
+        .scrollingTitle("Question")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaBar(edge: .bottom) {
-            BottomActions {
-                PrimaryButton(title: "Practice Answering", systemImage: "mic") {
-                    appState.activePractice = question
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                let isSaved = appState.isSaved(question)
+                Button(isSaved ? "Unsave" : "Save", systemImage: isSaved ? "bookmark.fill" : "bookmark") {
+                    appState.toggleSaved(question)
                 }
+                .sensoryFeedback(.selection, trigger: isSaved)
+                Menu {
+                    AddToPlaylistMenu(question: question, naming: $naming)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("More")
             }
+        }
+        .playlistNaming($naming)
+    }
+}
+
+extension QuestionDetailView {
+    /// "Good for working on your answer structure." when it builds the
+    /// current focus, else "Builds answer structure and concrete results."
+    var buildsLine: String? {
+        if let focus = appState.currentFocus, question.skills.contains(focus) {
+            return "Good for working on your \(focus.title.lowercased())."
+        }
+        let names = question.skills.map { $0.title.lowercased() }
+        guard !names.isEmpty else { return nil }
+        // Joined by hand: the system list style adds an Oxford comma.
+        let list = names.count > 1 ? names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1] : names[0]
+        return "Builds \(list)."
+    }
+}
+
+struct AnswerStep {
+    let title: String
+    let detail: String
+}
+
+extension QuestionCategory {
+    /// What the interviewer is listening for with this kind of question.
+    var whyAsked: String {
+        switch self {
+        case .common: "They want to hear how you introduce yourself and your work: what you pick, how clearly you explain it and whether you get to the point."
+        case .behavioral: "They want a real example with your own actions and a clear result."
+        case .roleBased: "They're checking that you understand the work and can explain your technical decisions and their trade-offs out loud."
+        }
+    }
+
+    var answerStructure: [AnswerStep] {
+        switch self {
+        case .behavioral:
+            [
+                AnswerStep(title: "Situation", detail: "Set the scene in a sentence or two."),
+                AnswerStep(title: "Task", detail: "What you were responsible for."),
+                AnswerStep(title: "Action", detail: "What you did, in your words, not the team’s."),
+                AnswerStep(title: "Result", detail: "What changed, with a number if you have one."),
+            ]
+        case .common, .roleBased:
+            [
+                AnswerStep(title: "Answer", detail: "Open with a one-sentence answer."),
+                AnswerStep(title: "Approach", detail: "How you went about it, and why."),
+                AnswerStep(title: "Details", detail: "The specifics that back it up."),
+            ]
         }
     }
 }

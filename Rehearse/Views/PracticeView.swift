@@ -1,146 +1,140 @@
 import SwiftUI
 
 /// Acting on feedback. Built around the one focus from the last interview:
-/// why it was flagged, the habit to apply, and a few questions that exercise
-/// it. After practicing, the next step is to rehearse again and check.
+/// a recommended question first, then more questions that exercise it.
 struct PracticeView: View {
-    let initialQuestion: Question?
     @Environment(AppState.self) private var appState
 
     var body: some View {
         ReportScroll {
             if let focus = appState.currentFocus {
-                focusCard(focus)
-                if let initialQuestion, !recommended.contains(initialQuestion) {
-                    SectionTitle(title: "Selected question")
-                    questionList([initialQuestion])
-                }
                 recommendedSection(focus)
-                nextStepCard(focus)
             } else {
                 noFocusSection
             }
         }
-        .navigationTitle("Practice")
-        .navigationBarTitleDisplayMode(.inline)
+        .screenTitle("Practice", inList: false)
     }
 
     private var recommended: [Question] { appState.recommendedQuestions() }
 
-    // MARK: - Focus
+    // MARK: - Recommended
 
-    private func focusCard(_ focus: Skill) -> some View {
-        SummaryCard(title: "Working on", systemImage: "bolt", tint: AppTheme.focus) {
-            Text(focus.title)
-                .font(.app(.title2, weight: .bold))
-            Text(focus.advice)
-                .fixedSize(horizontal: false, vertical: true)
-            if let evidence = appState.lastInterview?.feedback?.focusEvidence {
-                Text(evidence)
-                    .font(.app(.subheadline))
+    @ViewBuilder
+    private func recommendedSection(_ focus: Skill) -> some View {
+        if let featured = recommended.first {
+            featuredCard(featured, focus: focus)
+        }
+        let more = recommended.dropFirst()
+        VStack(spacing: 0) {
+            ForEach(Array(more.enumerated()), id: \.element.id) { index, question in
+                practiceRow(question)
+                // Between questions it starts under the text, past the circle,
+                // as in Reminders; above More Questions, at that row's edge.
+                let isLast = index == more.count - 1
+                Divider().padding(.leading, AppTheme.Spacing.md + (isLast ? 0 : Self.circleWidth + AppTheme.Spacing.sm))
+            }
+            NavigationLink(value: Route.library(focus: focus)) {
+                HStack {
+                    Text("More Questions")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(AppTheme.Spacing.md)
+            }
+            .buttonStyle(CardRowButtonStyle())
+            .foregroundStyle(AppTheme.brand)
+        }
+        .cardBackground()
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
+    }
+
+    /// The one question to answer first, with why it was picked and the habit
+    /// to apply while answering.
+    private func featuredCard(_ question: Question, focus: Skill) -> some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                Text(question.metaText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(question.text)
+                    .font(.questionInCard)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Why it was picked, in one line of the card's own voice.
+                Text(focus.recommendationReason)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
-    }
 
-    private func recommendedSection(_ focus: Skill) -> some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-            SectionTitle(title: "Practice questions")
-            VStack(spacing: 0) {
-                ForEach(recommended) { question in
-                    practiceRow(question)
-                    Divider().padding(.leading, AppTheme.Spacing.md)
-                }
-                NavigationLink(value: Route.library(focus: focus)) {
-                    HStack {
-                        Text("More questions for \(focus.title.lowercased())")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.app(.footnote, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(AppTheme.Spacing.md)
-                }
-                .buttonStyle(CardRowButtonStyle())
-                .foregroundStyle(AppTheme.brand)
+            PrimaryButton(title: "Answer Out Loud", systemImage: "mic.fill") {
+                appState.activePractice = question
             }
-            .cardBackground()
-            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card))
         }
-    }
-
-    /// Practice is only worth it if the next interview shows the change.
-    @ViewBuilder
-    private func nextStepCard(_ focus: Skill) -> some View {
-        let count = appState.practiceCountSinceLastInterview
-        if count > 0 {
-            NavigationLink(value: Route.setup(appState.nextInterview.map { .upcoming($0.id) } ?? .custom)) {
-                SummaryCard(title: "Rehearse again", systemImage: "arrow.clockwise", showsChevron: true) {
-                    Text("You’ve practiced \(count == 1 ? "once" : "\(count) times"). A full interview shows whether \(focus.title.lowercased()) has improved.")
-                        .font(.app(.subheadline))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .buttonStyle(CardButtonStyle())
-        }
+        .padding(AppTheme.Spacing.md)
+        .cardBackground()
     }
 
     // MARK: - No interview yet
 
     @ViewBuilder
     private var noFocusSection: some View {
-        SummaryCard(title: "Get started", systemImage: "sparkles") {
-            Text("Find out what to work on")
-                .font(.app(.title3, weight: .bold))
-            Text("Do a mock interview first. Afterwards you’ll know the one thing to work on, with questions to practice it.")
+        SummaryCard(title: "Get Started") {
+            Text("See what to work on")
+                .cardTitleStyle()
+            Text("Do one mock interview and you’ll get one thing to work on, with questions to practice it.")
                 .foregroundStyle(.secondary)
-            PrimaryButton(title: "Take a Mock Interview", systemImage: "mic") {
-                appState.path.append(.setup(.custom))
+            PrimaryButton(title: "Take a Mock Interview") {
+                appState.setUpInterview(.custom)
             }
             .padding(.top, AppTheme.Spacing.xs)
         }
-        if let initialQuestion {
-            SectionTitle(title: "Selected question")
-            questionList([initialQuestion])
-        }
         NavigationLink(value: Route.library(focus: nil)) {
-            SummaryCard(title: "Question library", systemImage: "text.book.closed", tint: AppTheme.focus, showsChevron: true) {
-                Text("Pick a question and practice answering it.")
-                    .font(.app(.subheadline))
-                    .foregroundStyle(.secondary)
+            // A row, not a card with a header: the name is the thing to tap.
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Library")
+                        .font(.headline)
+                    Text("Pick any question and answer it out loud.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: AppTheme.Spacing.xs)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
+            .padding(AppTheme.Spacing.md)
+            .cardBackground()
+            .foregroundStyle(Color.primary)
+            .multilineTextAlignment(.leading)
         }
         .buttonStyle(CardButtonStyle())
     }
 
     // MARK: - Rows
 
-    private func questionList(_ questions: [Question]) -> some View {
-        VStack(spacing: 0) {
-            ForEach(questions) { practiceRow($0) }
-        }
-        .cardBackground()
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card))
-    }
+    /// The checklist circle's column, so dividers can start past it.
+    private static let circleWidth: CGFloat = 24
 
     private func practiceRow(_ question: Question) -> some View {
         Button {
             appState.activePractice = question
         } label: {
-            HStack {
-                QuestionRow(question: question)
-                Spacer(minLength: AppTheme.Spacing.xs)
-                if practicedSinceLastInterview(question) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(AppTheme.success)
-                        .accessibilityLabel("Practiced")
-                } else {
-                    Image(systemName: "mic")
-                        .foregroundStyle(AppTheme.brand)
-                        .accessibilityHidden(true)
-                }
+            // A checklist, as Reminders draws one: an empty circle until the
+            // question is practiced, then a filled green one. The circle sits
+            // on the question's first line; the whole row starts practice.
+            HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
+                let isPracticed = practicedSinceLastInterview(question)
+                Image(systemName: isPracticed ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isPracticed ? AppTheme.practiced : Color(.tertiaryLabel))
+                    .frame(width: Self.circleWidth)
+                    .accessibilityLabel(isPracticed ? "Practiced" : "Not practiced")
+                QuestionRow(question: question, font: .headline, endsWithPeriod: true)
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, AppTheme.Spacing.md)
             .padding(.vertical, AppTheme.Spacing.sm)
@@ -177,24 +171,19 @@ struct PracticeSessionView: View {
                     // being practiced), then the question.
                     VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
                         if let focus {
-                            HStack(alignment: .top, spacing: AppTheme.Spacing.sm) {
-                                IconChip(systemImage: "bolt", tint: AppTheme.brand)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Practicing \(focus.title)")
-                                        .font(.app(.subheadline, weight: .semibold))
-                                    Text(focus.advice)
-                                        .font(.app(.footnote))
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                            .accessibilityElement(children: .combine)
+                            Text(focus.title)
+                                // The same quiet line as above every other question.
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                         Text(question.text)
-                            .font(AppTheme.question(.title))
-                            .lineSpacing(3)
+                            .font(.questionLarge)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityAddTraits(.isHeader)
+                        if let focus {
+                            Divider()
+                            TipRow(text: focus.advice)
+                        }
                     }
                     .padding(AppTheme.Spacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -202,14 +191,14 @@ struct PracticeSessionView: View {
 
                     if let notice {
                         Label(notice, systemImage: "exclamationmark.circle")
-                            .font(.app(.subheadline))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
 
                     if let result {
                         VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
                             Label("How that went", systemImage: "waveform")
-                                .font(.app(.headline))
+                                .font(.headline)
                             Text(result)
                         }
                         .padding(AppTheme.Spacing.md)
@@ -225,9 +214,9 @@ struct PracticeSessionView: View {
             .animation(.easeInOut(duration: 0.25), value: result)
             .safeAreaBar(edge: .bottom) {
                 if result == nil {
-                    RecordingControl(state: answerState, action: toggleRecording)
+                    AnswerButton(state: answerState, action: toggleRecording)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, AppTheme.Spacing.lg)
+                        .padding(.vertical, AppTheme.Spacing.md)
                 } else {
                     BottomActions {
                         PrimaryButton(title: "Done") { appState.activePractice = nil }
@@ -238,7 +227,7 @@ struct PracticeSessionView: View {
                     }
                 }
             }
-            .warmBackground()
+            .groupedBackground()
             .navigationTitle("Practice")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -281,7 +270,7 @@ struct PracticeSessionView: View {
 }
 
 #Preview("Practice") {
-    NavigationStack { PracticeView(initialQuestion: nil) }
+    NavigationStack { PracticeView() }
         .environment(AppState())
 }
 

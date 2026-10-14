@@ -8,7 +8,7 @@ enum QuestionCategory: String, CaseIterable, Identifiable, Hashable {
     var id: Self { self }
 }
 
-enum Difficulty: String, Hashable {
+enum Difficulty: String, CaseIterable, Hashable {
     case easy = "Easy"
     case medium = "Medium"
     case hard = "Hard"
@@ -44,12 +44,33 @@ enum Skill: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// What went wrong, in a few words, for a question's verdict.
+    var shortfall: String {
+        switch self {
+        case .answerStructure: "Details before the point"
+        case .concreteResults: "Unclear what you did"
+        case .tradeoffs: "No alternatives named"
+        }
+    }
+
+    /// How a stronger answer would open, as an example to copy.
+    var exampleOpening: String {
+        switch self {
+        case .answerStructure:
+            "“Our API slowed down under load, so I added a cache and cut response times from 900 to under 100 milliseconds. Here’s how.”"
+        case .concreteResults:
+            "“I rewrote the retry logic myself, and failed payments dropped by a third.”"
+        case .tradeoffs:
+            "“I chose a queue over direct calls. It adds a little delay, but nothing is lost if a service goes down.”"
+        }
+    }
+
     /// Why practice questions were picked for this skill.
     var recommendationReason: String {
         switch self {
-        case .answerStructure: "Open questions that are easy to ramble on, so you’ll notice when you do."
-        case .concreteResults: "Questions about what you did, where the details matter."
-        case .tradeoffs: "Questions with more than one reasonable answer."
+        case .answerStructure: "An open question, where rambling is easiest to catch."
+        case .concreteResults: "It asks what you did, so the details count."
+        case .tradeoffs: "There’s more than one good answer, so explain your choice."
         }
     }
 }
@@ -66,9 +87,9 @@ struct Question: Identifiable, Hashable {
 
     var roleLabel: String { role ?? "Any role" }
 
-    /// "Behavioral, medium" or "Role-based, hard, for iOS Engineer".
+    /// "Medium behavioral question" or "Hard role-based question for iOS Engineer".
     var metaText: String {
-        let base = "\(category.rawValue), \(difficulty.rawValue.lowercased())"
-        return role.map { "\(base), for \($0)" } ?? base
+        let base = "\(difficulty.rawValue) \(category.rawValue.lowercased()) question"
+        return role.map { "\(base) for \($0)" } ?? base
     }
 }
