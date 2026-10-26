@@ -35,6 +35,9 @@ final class MockInterviewService {
     /// Hears each answer and measures how it was said.
     private let recorder = AnswerRecorder()
     private var isStartingRecording = false
+    /// False when speech recognition couldn't start: the answer is still
+    /// timed and the interview goes on, it just isn't transcribed.
+    private var isTranscribing = true
 
     /// Answers shorter than this are treated as a failed recording.
     private let minimumAnswerSeconds: TimeInterval = 2
@@ -107,6 +110,14 @@ final class MockInterviewService {
             do {
                 try await recorder.start()
                 guard phase == .ready else { recorder.cancel(); return }
+                isTranscribing = true
+                phase = .recording(startedAt: .now)
+            } catch AnswerRecorder.Failure.unavailable {
+                // Without speech recognition (as in the simulator) the
+                // interview still goes on; the answer just isn't written down.
+                guard phase == .ready else { return }
+                isTranscribing = false
+                notice = "Speech recognition isn’t available, so this answer won’t be transcribed."
                 phase = .recording(startedAt: .now)
             } catch {
                 notice = error.localizedDescription
@@ -130,29 +141,20 @@ final class MockInterviewService {
         }
 
         phase = .processing
-        let spoken: SpokenAnswer?
-        do {
-            spoken = try await recorder.stop()
-        } catch {
-            notice = error.localizedDescription
-            phase = .ready
-            return
-        }
+        // A failed or empty transcription never holds the interview up: the
+        // answer counts, it's just left out of the transcript.
+        let spoken = isTranscribing ? try? await recorder.stop() : nil
         guard phase == .processing else { return }
-        guard let spoken else {
-            notice = "We didn’t catch that. Check your microphone and answer out loud."
-            phase = .ready
-            return
-        }
+        notice = spoken == nil ? "We couldn’t transcribe that answer, so it’s left out of your transcript." : nil
 
         if !isFollowUp { answeredTurnIDs.append(turn.id) }
         transcript.append(TranscriptEntry(
             question: currentQuestion ?? "",
-            answer: spoken.text,
+            answer: spoken?.text ?? TranscriptEntry.notTranscribed,
             isFollowUp: isFollowUp,
             // Still the prepared evaluation until answers are judged.
             moment: isFollowUp ? nil : turn.moment,
-            measurements: spoken.measurements
+            measurements: spoken?.measurements
         ))
         phase = .captured
 

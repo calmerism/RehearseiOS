@@ -164,6 +164,7 @@ struct PracticeSessionView: View {
     @State private var isSaved = false
     /// What was heard, shown back so the candidate can check it.
     @State private var heard: SpokenAnswer?
+    @State private var isTranscribing = true
     @State private var recorder = AnswerRecorder()
 
     var body: some View {
@@ -273,6 +274,13 @@ struct PracticeSessionView: View {
             Task {
                 do {
                     try await recorder.start()
+                    isTranscribing = true
+                    answerState = .recording(startedAt: .now)
+                } catch AnswerRecorder.Failure.unavailable {
+                    // Practice still works without speech recognition; the
+                    // answer just isn't written down.
+                    isTranscribing = false
+                    notice = "Speech recognition isn’t available, so this answer won’t be transcribed."
                     answerState = .recording(startedAt: .now)
                 } catch {
                     notice = error.localizedDescription
@@ -288,20 +296,10 @@ struct PracticeSessionView: View {
             }
             answerState = .processing
             Task {
-                let spoken: SpokenAnswer?
-                do {
-                    spoken = try await recorder.stop()
-                } catch {
-                    notice = error.localizedDescription
-                    answerState = .ready
-                    return
-                }
+                // A failed or empty transcription still finishes the attempt.
+                let spoken = isTranscribing ? try? await recorder.stop() : nil
                 guard answerState == .processing else { return }
-                guard let spoken else {
-                    notice = "We didn’t catch that. Check your microphone and answer out loud."
-                    answerState = .ready
-                    return
-                }
+                notice = spoken == nil ? "We couldn’t transcribe that answer, so there’s no transcript this time." : nil
                 heard = spoken
                 answerState = .captured
                 result = MockFeedbackService.practiceNote(for: focus)

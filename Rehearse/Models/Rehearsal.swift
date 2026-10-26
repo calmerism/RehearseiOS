@@ -38,6 +38,9 @@ struct Rehearsal: Identifiable, Hashable {
 }
 
 struct TranscriptEntry: Hashable, nonisolated Codable {
+    /// The answer's text when speech recognition couldn't write it down.
+    static let notTranscribed = "Not transcribed"
+
     var question: String
     var answer: String
     var isFollowUp: Bool
