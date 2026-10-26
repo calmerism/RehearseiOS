@@ -24,7 +24,7 @@ struct ScoringInfoView: View {
 
             Section {
                 source("Your Words", detail: "What you said, from the transcript", systemImage: "text.bubble.fill")
-                source("Your Voice", detail: "Pace, pauses and filler words", systemImage: "waveform")
+                source("Your Voice", detail: Scoring.flagsFillerWords ? "Pace, pauses and filler words" : "Pace and pauses", systemImage: "waveform")
                 source("Your Camera", detail: "Where you look while you answer", systemImage: "video.fill")
             } header: {
                 Text("What It’s Based On")

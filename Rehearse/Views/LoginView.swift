@@ -5,8 +5,9 @@ import SwiftUI
 /// screen creates an account. It behaves like the real thing: the email is
 /// checked, the password can be shown, new passwords show their rules as
 /// they're met, buttons wait while they work, and a forgotten password gets
-/// a reset link. In this prototype nothing is sent: logging in opens the
-/// returning candidate's app, and a new account opens a new candidate's.
+/// a reset link. With Supabase set up (`BackendSecrets`) these are real
+/// accounts. Without it nothing is sent: logging in opens the returning
+/// candidate's app, and a new account opens a new candidate's.
 struct LoginView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
@@ -18,6 +19,8 @@ struct LoginView: View {
     /// Which button is waiting, if any.
     @State private var working: Working?
     @State private var emailError: String?
+    /// Shown after sign up when the account must confirm its email first.
+    @State private var confirmationNotice: String?
     @State private var isResettingPassword = false
     @FocusState private var field: Field?
 
@@ -300,6 +303,12 @@ struct LoginView: View {
                     .foregroundStyle(AppTheme.record)
                     .transition(.opacity)
             }
+            if let confirmationNotice {
+                Label(confirmationNotice, systemImage: "envelope.fill")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(AppTheme.success)
+                    .transition(.opacity)
+            }
             if isCreatingAccount {
                 // Only once a password is being typed, all on one line.
                 if !password.isEmpty {
@@ -348,10 +357,21 @@ struct LoginView: View {
         signIn(with: .email)
     }
 
-    /// Waits as a real request would, then opens the app: a new account as a
-    /// new candidate, a log in as the returning one.
+    /// With accounts set up, creates or logs in to a real one. Otherwise waits
+    /// as a request would and opens the mock app: a new account as a new
+    /// candidate, a log in as the returning one.
     private func signIn(with method: Working) {
         field = nil
+        emailError = nil
+        confirmationNotice = nil
+        if Backend.isConfigured {
+            guard method == .email else {
+                emailError = "Sign in with Apple isn’t set up yet. Use your email for now."
+                return
+            }
+            signInToAccount()
+            return
+        }
         working = method
         let isNew = isCreatingAccount
         let firstName = name.trimmingCharacters(in: .whitespaces).split(separator: " ").first.map(String.init)
@@ -365,6 +385,35 @@ struct LoginView: View {
                 appState.isSignedIn = true
             }
             working = nil
+        }
+    }
+
+    private func signInToAccount() {
+        working = .email
+        let isNew = isCreatingAccount
+        let name = name.trimmingCharacters(in: .whitespaces)
+        let email = email.trimmingCharacters(in: .whitespaces)
+        let password = password
+        Task {
+            defer { working = nil }
+            do {
+                if isNew {
+                    switch try await AuthService.signUp(name: name, email: email, password: password) {
+                    case .signedIn(let account):
+                        appState.didSignIn(account, isNew: true)
+                    case .confirmEmail:
+                        withAnimation {
+                            confirmationNotice = "Check your email to confirm your account, then log in."
+                            isCreatingAccount = false
+                        }
+                    }
+                } else {
+                    let account = try await AuthService.signIn(email: email, password: password)
+                    appState.didSignIn(account, isNew: false)
+                }
+            } catch {
+                withAnimation { emailError = error.localizedDescription }
+            }
         }
     }
 }
@@ -584,7 +633,13 @@ private struct ResetPasswordSheet: View {
         isFocused = false
         isSending = true
         Task {
-            try? await Task.sleep(for: .seconds(1))
+            if Backend.isConfigured {
+                // Says it was sent either way, so nobody can test which
+                // emails have accounts.
+                try? await AuthService.sendPasswordReset(to: email.trimmingCharacters(in: .whitespaces))
+            } else {
+                try? await Task.sleep(for: .seconds(1))
+            }
             isSending = false
             isSent = true
         }

@@ -21,8 +21,8 @@ struct InterviewTurn: Identifiable, Hashable {
         let mockAnswer: String
     }
 
-    struct Moment: Hashable {
-        enum Kind: Hashable {
+    struct Moment: Hashable, nonisolated Codable {
+        enum Kind: Hashable, nonisolated Codable {
             case strength
             case weakness(Skill)
         }

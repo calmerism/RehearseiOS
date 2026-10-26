@@ -10,22 +10,21 @@ struct QuestionLibraryView: View {
     @State private var category: QuestionCategory?
     @State private var focus: Skill?
     @State private var difficulty: Difficulty?
+    /// One subject, such as System Design, or every subject.
+    @State private var area: String?
     @State private var naming: PlaylistNameRequest?
+    /// How many matching questions the list shows. Thousands of rows at once
+    /// make scrolling and filtering heavy, so it grows a page at a time.
+    @State private var shownCount = Self.pageSize
+
+    private static let pageSize = 50
 
     init(initialFocus: Skill?) {
         _focus = State(initialValue: initialFocus)
     }
 
-    private var visibleQuestions: [Question] {
-        appState.library.filter { question in
-            (category == nil || question.category == category)
-                && (difficulty == nil || question.difficulty == difficulty)
-                && (focus.map { question.skills.contains($0) } ?? true)
-                && (searchText.isEmpty || question.text.localizedCaseInsensitiveContains(searchText))
-        }
-    }
-
     var body: some View {
+        let visibleQuestions = appState.questions(category: category, difficulty: difficulty, skill: focus, area: area, matching: searchText)
         List {
             TabHeaderSection()
 
@@ -42,7 +41,9 @@ struct QuestionLibraryView: View {
             Section {
                 Picker("Category", selection: $category) {
                     Text("All").tag(QuestionCategory?.none)
-                    ForEach(QuestionCategory.allCases, id: \.self) { category in
+                    // Only groups the bank has questions in; the real bank
+                    // has no Common ones.
+                    ForEach(appState.libraryCategories, id: \.self) { category in
                         Text(category.rawValue).tag(Optional(category))
                     }
                 }
@@ -66,17 +67,24 @@ struct QuestionLibraryView: View {
                         searchText = ""
                         category = nil
                         difficulty = nil
+                        area = nil
                         focus = nil
                     }
                 }
                 .listRowBackground(Color.clear)
             } else {
                 Section {
-                    ForEach(visibleQuestions) { question in
+                    ForEach(visibleQuestions.prefix(shownCount)) { question in
                         NavigationLink(value: Route.question(question)) {
                             QuestionRow(question: question, isPracticed: !appState.practiceHistory(for: question).isEmpty, font: .headline, endsWithPeriod: true, practicedOnTrailing: true)
                         }
                         .questionActions(question, naming: $naming)
+                    }
+                    if visibleQuestions.count > shownCount {
+                        Button("Show More") {
+                            shownCount += Self.pageSize * 2
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                 } header: {
                     if let focus {
@@ -106,14 +114,32 @@ struct QuestionLibraryView: View {
                     Text("Any Difficulty").tag(Difficulty?.none)
                     ForEach(Difficulty.allCases, id: \.self) { Text($0.rawValue).tag(Optional($0)) }
                 }
+                if !appState.libraryAreas.isEmpty {
+                    // A submenu, as Mail's filters nest a long list.
+                    Picker(selection: $area) {
+                        Text("All Subjects").tag(String?.none)
+                        ForEach(appState.libraryAreas, id: \.self) { area in
+                            Text(Question.title(forArea: area)).tag(Optional(area))
+                        }
+                    } label: {
+                        Label(area.map(Question.title(forArea:)) ?? "Subject", systemImage: "square.grid.2x2")
+                    }
+                    .pickerStyle(.menu)
+                }
             } label: {
-                Image(systemName: difficulty == nil
+                Image(systemName: difficulty == nil && area == nil
                     ? "line.3.horizontal.decrease"
                     : "line.3.horizontal.decrease.circle.fill")
             }
-            .accessibilityLabel("Filter by difficulty")
+            .accessibilityLabel("Filter questions")
         }
         .scrollDismissesKeyboard(.immediately)
+        // A new filter starts from the top again.
+        .onChange(of: searchText) { shownCount = Self.pageSize }
+        .onChange(of: category) { shownCount = Self.pageSize }
+        .onChange(of: difficulty) { shownCount = Self.pageSize }
+        .onChange(of: area) { shownCount = Self.pageSize }
+        .onChange(of: focus) { shownCount = Self.pageSize }
         .playlistNaming($naming)
     }
 

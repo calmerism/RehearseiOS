@@ -1,6 +1,6 @@
 import Foundation
 
-enum InterviewType: String, CaseIterable, Identifiable, Hashable {
+enum InterviewType: String, CaseIterable, Identifiable, Hashable, nonisolated Codable {
     case technical = "Technical"
     case nonTechnical = "Non-Technical"
 
@@ -21,7 +21,7 @@ enum InterviewType: String, CaseIterable, Identifiable, Hashable {
 /// Part of an answer said in Hindi, as students often slip into it mid
 /// answer, and how to say the same thing in English. Answer Review shows
 /// these so the candidate learns the English for what they meant.
-struct HindiLine: Hashable {
+struct HindiLine: Hashable, nonisolated Codable {
     /// What was said, as heard.
     let said: String
     /// The same, said in English.
@@ -30,7 +30,7 @@ struct HindiLine: Hashable {
 
 /// The context an interview is rehearsed against: either a real interview the
 /// candidate has coming up, or a generic mock they configured for practice.
-struct Interview: Identifiable, Hashable {
+struct Interview: Identifiable, Hashable, nonisolated Codable {
     var id = UUID()
     var role: String
     /// `nil` means the mock is not company-specific.

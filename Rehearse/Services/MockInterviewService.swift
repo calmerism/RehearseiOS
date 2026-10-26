@@ -32,6 +32,10 @@ final class MockInterviewService {
     private(set) var answeredTurnIDs: [String] = []
     private(set) var skippedTurnIDs: [String] = []
 
+    /// Hears each answer and measures how it was said.
+    private let recorder = AnswerRecorder()
+    private var isStartingRecording = false
+
     /// Answers shorter than this are treated as a failed recording.
     private let minimumAnswerSeconds: TimeInterval = 2
 
@@ -93,34 +97,62 @@ final class MockInterviewService {
     // MARK: - Answering
 
     func startRecording() {
-        guard phase == .ready else { return }
+        guard phase == .ready, !isStartingRecording else { return }
         notice = nil
-        phase = .recording(startedAt: .now)
+        isStartingRecording = true
+        // The clock starts once the microphone is listening, not while a
+        // permission prompt is up.
+        Task {
+            defer { isStartingRecording = false }
+            do {
+                try await recorder.start()
+                guard phase == .ready else { recorder.cancel(); return }
+                phase = .recording(startedAt: .now)
+            } catch {
+                notice = error.localizedDescription
+            }
+        }
+    }
+
+    /// Stops listening without keeping anything, as when the interview closes.
+    func cancelRecording() {
+        recorder.cancel()
     }
 
     func stopRecording() async {
         guard case .recording(let startedAt) = phase, let turn = currentTurn else { return }
 
         guard Date.now.timeIntervalSince(startedAt) >= minimumAnswerSeconds else {
+            recorder.cancel()
             notice = "That was too short to catch. Tap when you’re ready and answer out loud."
             phase = .ready
             return
         }
 
         phase = .processing
-        try? await Task.sleep(for: .seconds(1.2))
+        let spoken: SpokenAnswer?
+        do {
+            spoken = try await recorder.stop()
+        } catch {
+            notice = error.localizedDescription
+            phase = .ready
+            return
+        }
         guard phase == .processing else { return }
+        guard let spoken else {
+            notice = "We didn’t catch that. Check your microphone and answer out loud."
+            phase = .ready
+            return
+        }
 
-        let answer = isFollowUp ? (turn.followUp?.mockAnswer ?? "") : turn.mockAnswer
         if !isFollowUp { answeredTurnIDs.append(turn.id) }
         transcript.append(TranscriptEntry(
             question: currentQuestion ?? "",
-            answer: answer,
+            answer: spoken.text,
             isFollowUp: isFollowUp,
+            // Still the prepared evaluation until answers are judged.
             moment: isFollowUp ? nil : turn.moment,
-            // Heard partly in Hindi: kept as said, with each Hindi line's English.
-            spokenAnswer: MockData.mixedAnswers[answer]?.said,
-            hindiLines: MockData.mixedAnswers[answer]?.lines ?? []
+            measurements: spoken.measurements
         ))
         phase = .captured
 

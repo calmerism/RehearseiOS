@@ -499,8 +499,11 @@ struct ProfileSetupView: View {
         case .reminders:
             VStack(spacing: AppTheme.Spacing.xs) {
                 PrimaryButton(title: "Turn On Reminders") {
-                    appState.remindersOn = true
-                    advance()
+                    // iOS asks for permission; saying no leaves them off.
+                    Task {
+                        appState.remindersOn = await InterviewReminders.requestPermission()
+                        advance()
+                    }
                 }
                 Button("Not Now") {
                     appState.remindersOn = false

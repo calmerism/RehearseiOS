@@ -13,6 +13,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
                 TabHeader()
                 greeting
+                unsavedNotice
                 mockInterviewCard
                 upcomingSection
                 lastScoreCard
@@ -34,6 +35,39 @@ struct HomeView: View {
                 }
                 .accessibilityLabel("Profile")
             }
+        }
+    }
+
+    // MARK: - Unsaved changes
+
+    /// Shown only while a change couldn't be saved to the account, as Notes
+    /// says when it can't sync.
+    @ViewBuilder
+    private var unsavedNotice: some View {
+        if !appState.unsavedChanges.isEmpty {
+            HStack(spacing: AppTheme.Spacing.sm) {
+                Image(systemName: "exclamationmark.icloud.fill")
+                    .font(.title3)
+                    .foregroundStyle(AppTheme.graphic)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Some changes aren’t saved yet")
+                        .font(.subheadline.weight(.semibold))
+                    Text("They’re kept on this phone and will save when you’re back online.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: AppTheme.Spacing.xs)
+                Button("Try Again") {
+                    Task { await appState.retryUnsavedChanges() }
+                }
+                .font(.subheadline.weight(.semibold))
+                .disabled(appState.isRetryingSaves)
+            }
+            .padding(AppTheme.Spacing.md)
+            .cardBackground()
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
+            .transition(.opacity)
         }
     }
 
@@ -332,7 +366,7 @@ struct HomeView: View {
     @ViewBuilder
     private var starterQuestions: some View {
         if appState.isNewUser {
-            let starters = appState.library.filter { $0.difficulty == .easy }.prefix(3)
+            let starters = appState.warmUp
             SectionTitle(title: "Warm Up", actionTitle: "See All", destination: .library(focus: nil))
             VStack(spacing: 0) {
                 ForEach(Array(starters.enumerated()), id: \.element.id) { index, question in
@@ -395,7 +429,7 @@ struct HomeView: View {
                 Button("New candidate") { appState.load(.newUser) }
             }
             Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") {
-                withAnimation(.smooth(duration: 0.4)) { appState.isSignedIn = false }
+                appState.signOut()
             }
         } label: {
             Image(systemName: "slider.horizontal.3")

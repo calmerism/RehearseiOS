@@ -76,6 +76,29 @@ extension AppState {
 }
 
 import SwiftUI
+import UserNotifications
+
+extension InterviewReminders {
+    /// `-testReminder`: the first upcoming interview's first reminder again,
+    /// 8 seconds from now, so a tap can be tried without waiting days.
+    static func scheduleTestReminderIfAsked(for interviews: [Interview]) async {
+        guard ProcessInfo.processInfo.arguments.contains("-testReminder"),
+              let reminder = interviews.lazy.flatMap({ requests(for: $0) }).first else { return }
+        let request = UNNotificationRequest(
+            identifier: "test-" + reminder.identifier,
+            content: reminder.content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 8, repeats: false)
+        )
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
+    /// With `-testReminder`, prints what's scheduled after each change.
+    static func logScheduledIfAsked() async {
+        guard ProcessInfo.processInfo.arguments.contains("-testReminder") else { return }
+        let scheduled = await UNUserNotificationCenter.current().pendingNotificationRequests()
+        print("Reminders scheduled (\(scheduled.count)):", scheduled.map(\.identifier).sorted().joined(separator: ", "))
+    }
+}
 
 extension View {
     /// `-bottom` opens scrolling screens already scrolled to the end, so the

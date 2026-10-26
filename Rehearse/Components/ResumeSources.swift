@@ -99,7 +99,11 @@ private struct ResumeSourcePresenter: ViewModifier {
     func body(content: Content) -> some View {
         content
             .fileImporter(isPresented: showing(.file), allowedContentTypes: ResumeSource.fileTypes) { result in
-                if case .success(let url) = result { read(url.lastPathComponent) }
+                // Kept as a copy so it can be read after the picker closes.
+                if case .success(let url) = result {
+                    ResumeReader.keep(url)
+                    read(url.lastPathComponent)
+                }
             }
             .fullScreenCover(isPresented: showing(.scan)) {
                 ResumeScannerView { read("Scanned Resume.pdf") }

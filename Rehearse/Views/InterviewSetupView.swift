@@ -22,6 +22,7 @@ struct InterviewSetupView: View {
     /// A file being read, or one that couldn't be, when uploading here.
     @State private var upload: ResumeStatus = .none
     @State private var resumeSource: ResumeSource?
+    @State private var hasAppeared = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -52,6 +53,9 @@ struct InterviewSetupView: View {
             }
         }
         .onAppear {
+            // Coming back from the Resume Library keeps what was chosen there.
+            guard !hasAppeared else { return }
+            hasAppeared = true
             if case .upcoming(let id) = mode, let upcoming = appState.upcomingInterview(id: id) {
                 durationMinutes = upcoming.durationMinutes
                 resumeChoice = appState.defaultResumeChoice(for: id)
@@ -207,10 +211,7 @@ private extension InterviewSetupView {
                 .padding(.vertical, AppTheme.Spacing.xxs)
             } else if let resumeChoice, let context = appState.resumeContext(for: resumeChoice) {
                 attachedRow(resumeChoice, context: context)
-                Menu("Change Resume") {
-                    profileChoices
-                    Button("Upload New File", systemImage: "doc.badge.plus") { resumeSource = .file }
-                }
+                profileLink("Change from Profile")
                 Button("Remove Resume", role: .destructive) {
                     withAnimation { self.resumeChoice = nil }
                 }
@@ -226,13 +227,7 @@ private extension InterviewSetupView {
                     .padding(.vertical, AppTheme.Spacing.xxs)
                 }
                 if appState.resume.context != nil {
-                    if appState.tailoredResumes.isEmpty {
-                        Button("Choose from Profile", systemImage: "person.crop.circle.fill") {
-                            withAnimation { resumeChoice = .original }
-                        }
-                    } else {
-                        Menu("Choose from Profile", systemImage: "person.crop.circle.fill") { profileChoices }
-                    }
+                    profileLink("Choose from Profile")
                 }
                 Button("Upload New File", systemImage: "doc.badge.plus") { resumeSource = .file }
             }
@@ -246,18 +241,12 @@ private extension InterviewSetupView {
         }
     }
 
-    /// The Profile resume and its tailored versions, checked when attached.
-    var profileChoices: some View {
-        Picker("From Your Profile", selection: $resumeChoice.animation()) {
-            if appState.resume.context != nil {
-                Text("Original Resume").tag(ResumeChoice?.some(.original))
-            }
-            ForEach(appState.tailoredResumes) { version in
-                Text("For \(version.target), \(version.angle.lowercased())")
-                    .tag(ResumeChoice?.some(.tailored(version.id)))
-            }
+    /// Pushes every resume the candidate has had, as the Library pushes a
+    /// collection.
+    func profileLink(_ title: String) -> some View {
+        NavigationLink(title) {
+            ResumeLibraryView(selection: $resumeChoice)
         }
-        .pickerStyle(.inline)
     }
 
     func attachedRow(_ choice: ResumeChoice, context: ResumeContext) -> some View {

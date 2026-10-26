@@ -49,6 +49,7 @@ struct LiveInterviewView: View {
         .onChange(of: service.phase) { _, phase in
             if phase == .finished { finish() }
         }
+        .onDisappear { service.cancelRecording() }
         .sensoryFeedback(.success, trigger: stage) { _, new in
             if case .feedback = new { true } else { false }
         }

@@ -112,7 +112,7 @@ enum MockFeedbackService {
         case .nonTechnical:
             Baseline(
                 overall: 70, communication: 76,
-                communicationNote: "Steady pace, with few filler words.",
+                communicationNote: "Steady pace, and you got to the point quickly.",
                 answerQuality: 64, answerQualityNote: "Relevant stories, but outcomes were often missing.",
                 focus: .concreteResults,
                 evidence: "Several stories ended without saying what changed."

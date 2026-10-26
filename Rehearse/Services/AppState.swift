@@ -42,15 +42,6 @@ struct SetupRequest: Identifiable {
     let mode: SetupMode
 }
 
-/// How firmly feedback is worded. A preference only in this prototype.
-enum FeedbackStyle: String, CaseIterable, Identifiable {
-    case supportive = "Supportive"
-    case standard = "Standard"
-    case tough = "Tough"
-
-    var id: Self { self }
-}
-
 /// Opens the upcoming-interview sheet: empty to add one, or with an existing
 /// interview to reschedule it.
 struct InterviewEditorRequest: Identifiable {
@@ -77,6 +68,15 @@ final class AppState {
     /// Signed out on launch, so the login screen comes first. Any sign in
     /// opens the app; nothing is checked in this prototype.
     var isSignedIn = false
+    /// The real account signed in, when Supabase is set up. While it's set,
+    /// interviews and rehearsals are saved to it as they change.
+    var account: AuthService.Account?
+    /// Set once the account's saved data is in place, so nothing is written
+    /// back to it before then and overwrites it with the defaults.
+    var hasLoadedAccount = false
+    /// Saves that failed and are waiting to be tried again.
+    var unsavedChanges: [@Sendable () async throws -> Void] = []
+    var isRetryingSaves = false
     /// The name the candidate signed up with; the prototype's own until then.
     var candidateName = MockData.candidateName
     /// First launch shows the welcome before the login.
@@ -86,7 +86,9 @@ final class AppState {
     /// A new account sets up its profile before Home.
     var needsProfileSetup = false
     /// What the candidate is preparing for, from profile setup.
-    var targetRole = "Software Engineer"
+    var targetRole = "Software Engineer" {
+        didSet { warmUp = Self.warmUpQuestions(from: library, role: targetRole) }
+    }
     var experienceLevel = MockData.candidateExperienceLevel
     var selectedTab: AppTab = .home
     /// The Home tab's stack; the interview flow returns here.
@@ -116,8 +118,25 @@ final class AppState {
     var resume: ResumeStatus = .none
     /// The Profile resume rewritten for particular jobs, newest first.
     private(set) var tailoredResumes: [ResumeVersion] = []
+    /// Resumes the Profile had before, newest first.
+    private(set) var pastResumes: [PastResume] = []
     var rehearsals: [Rehearsal] = []
-    let library = MockData.questions
+    /// The question bank: the prototype's own, or a real account's from
+    /// Supabase. Thousands of questions, so everything screens need from it
+    /// is worked out once here, when it changes, never while drawing.
+    var library = MockData.questions {
+        didSet { indexLibrary() }
+    }
+    /// The bank by id, for Saved, playlists and practice history.
+    private(set) var questionsByID: [Question.ID: Question] = [:]
+    /// Each question's text lowercased, in `library` order, for search.
+    private(set) var searchKeys: [String] = []
+    /// The category tabs that have questions in them.
+    private(set) var libraryCategories: [QuestionCategory] = []
+    /// The bank's subjects, alphabetically, for the Library's filter.
+    private(set) var libraryAreas: [String] = []
+    /// Today's three Warm Up questions.
+    private(set) var warmUp: [Question] = []
     /// Saved questions, newest first, like liked songs.
     var savedQuestionIDs: [Question.ID] = []
     var playlists: [QuestionPlaylist] = []
@@ -133,11 +152,13 @@ final class AppState {
     private var pendingInterview: InterviewSession?
 
     // Profile preferences. Stored, but they don't change feedback yet.
-    var feedbackStyle: FeedbackStyle = .standard
-    var flagsFillerWords = true
+    var flagsFillerWords = true {
+        didSet { Scoring.flagsFillerWords = flagsFillerWords }
+    }
     var remindersOn = true
 
     init(scenario: DemoScenario = .returning) {
+        indexLibrary()
         load(scenario)
         #if DEBUG
         applyDebugLaunchArguments()
@@ -150,6 +171,7 @@ final class AppState {
         questionsPath = []
         resume = .none
         tailoredResumes = []
+        pastResumes = []
         switch scenario {
         case .returning:
             upcomingInterviews = MockData.upcomingInterviews
@@ -157,6 +179,11 @@ final class AppState {
             rehearsals = MockData.rehearsals
             savedQuestionIDs = Self.withImportant(MockData.savedQuestionIDs)
             playlists = MockData.playlists
+            // A returning candidate has a resume, and a version tailored for
+            // each upcoming interview, so there's something to choose from.
+            resume = .ready(MockData.resume)
+            tailoredResumes = MockData.tailoredHistory(upcoming: upcomingInterviews, completed: completedInterviews)
+            pastResumes = MockData.pastResumes
         case .newUser:
             upcomingInterviews = []
             completedInterviews = []
@@ -230,6 +257,94 @@ final class AppState {
         return scores.reduce(0, +) / scores.count
     }
 
+    /// Warm Up: three quick questions that cover the whole interview, not
+    /// one subject. One about the candidate (behavioral, or a common opener),
+    /// one core concept any engineer is asked, and one for their own role.
+    /// Each is the shortest kind the bank has, and each changes daily.
+    private static func warmUpQuestions(from library: [Question], role: String) -> [Question] {
+        let day = Calendar.current.ordinality(of: .day, in: .era, for: .now) ?? 0
+        func crisp(_ question: Question) -> Bool {
+            question.difficulty == .easy
+                && question.text.count <= 90
+                && question.text.filter { $0 == "?" }.count <= 1
+        }
+        /// Today's pick from a group, the same all day.
+        func pick(_ group: [Question]) -> Question? {
+            group.isEmpty ? nil : group[day % group.count]
+        }
+
+        // Behavioral questions run long ("Tell me about a conflict. How did
+        // you handle it, and what changed?"), so Warm Up asks only the
+        // opening question when that's short and complete on its own; the
+        // follow-ups are what a real interviewer would ask next.
+        let aboutYou = library
+            .filter { ($0.category == .behavioral || $0.category == .common) && $0.difficulty != .hard }
+            .compactMap { question -> Question? in
+                // Up to and including the first "." or "?" followed by a space.
+                let text = question.text
+                let end = text.indices.first { index in
+                    let next = text.index(after: index)
+                    return (text[index] == "." || text[index] == "?") && next < text.endIndex && text[next] == " "
+                }
+                let opening = end.map { String(text[...$0]) } ?? text
+                // Only openings that ask something on their own, not a
+                // scenario's set-up line.
+                let asks = ["tell me", "describe", "give an example", "walk me", "how do", "how would", "what", "why", "where"]
+                    .contains { opening.lowercased().hasPrefix($0) }
+                guard asks, opening.count <= 80 else { return nil }
+                return Question(id: question.id, text: opening, category: question.category,
+                                difficulty: question.difficulty, role: question.role, skills: question.skills)
+            }
+        let concepts = library.filter { $0.role == nil && $0.category == .roleBased && crisp($0) }
+        let ownRole = library.filter { $0.role == role && crisp($0) }
+        let anyRole = library.filter { $0.role != nil && crisp($0) }
+
+        let sortedConcepts = concepts.sorted { $0.id < $1.id }
+        // A role the bank has no questions for, such as Software Engineer,
+        // gets a second general question: those areas (algorithms, system
+        // design, databases) are what a software engineer is asked. It comes
+        // from the other half of the list, so it differs from the first.
+        let rolePick: Question? = if !ownRole.isEmpty {
+            pick(ownRole.sorted { $0.id < $1.id })
+        } else if sortedConcepts.count > 1 {
+            sortedConcepts[(day + sortedConcepts.count / 2) % sortedConcepts.count]
+        } else {
+            pick(anyRole.sorted { $0.id < $1.id })
+        }
+        let picks = [
+            pick(aboutYou.sorted { $0.id < $1.id }),
+            pick(sortedConcepts),
+            rolePick,
+        ]
+        var seen = Set<Question.ID>()
+        return picks.compactMap { $0 }.filter { seen.insert($0.id).inserted }
+    }
+
+    private func indexLibrary() {
+        questionsByID = Dictionary(library.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        searchKeys = library.map { $0.text.lowercased() }
+        libraryCategories = QuestionCategory.allCases.filter { category in library.contains { $0.category == category } }
+        libraryAreas = Set(library.compactMap(\.area)).sorted { Question.title(forArea: $0) < Question.title(forArea: $1) }
+        warmUp = Self.warmUpQuestions(from: library, role: targetRole)
+    }
+
+    /// The bank narrowed by the Library's filters. Search matches the
+    /// lowercased text, which is far quicker than a locale-aware compare
+    /// across thousands of questions on every keystroke.
+    func questions(category: QuestionCategory?, difficulty: Difficulty?, skill: Skill?, area: String? = nil, matching search: String) -> [Question] {
+        let needle = search.trimmingCharacters(in: .whitespaces).lowercased()
+        return library.indices.compactMap { index in
+            let question = library[index]
+            guard category == nil || question.category == category,
+                  difficulty == nil || question.difficulty == difficulty,
+                  area == nil || question.area == area,
+                  skill.map({ question.skills.contains($0) }) ?? true,
+                  needle.isEmpty || searchKeys[index].contains(needle)
+            else { return nil }
+            return question
+        }
+    }
+
     func recommendedQuestions(limit: Int = 3) -> [Question] {
         guard let focus = currentFocus else { return [] }
         let role = nextInterview?.role ?? lastInterview?.interview?.role
@@ -289,7 +404,7 @@ final class AppState {
         case .saved: savedQuestionIDs
         case .playlist(let id): playlist(id: id)?.questionIDs ?? []
         }
-        return ids.compactMap { id in library.first { $0.id == id } }
+        return ids.compactMap { questionsByID[$0] }
     }
 
     func playlist(id: QuestionPlaylist.ID) -> QuestionPlaylist? {
@@ -300,17 +415,20 @@ final class AppState {
     func createPlaylist(named name: String, with question: Question? = nil) -> QuestionPlaylist {
         let playlist = QuestionPlaylist(name: name, questionIDs: question.map { [$0.id] } ?? [])
         playlists.append(playlist)
+        syncPlaylist(playlist.id)
         return playlist
     }
 
     func renamePlaylist(id: QuestionPlaylist.ID, to name: String) {
         guard let index = playlists.firstIndex(where: { $0.id == id }) else { return }
         playlists[index].name = name
+        syncPlaylist(id)
     }
 
     func deletePlaylist(id: QuestionPlaylist.ID) {
         playlists.removeAll { $0.id == id }
         questionsPath.removeAll { $0 == .collection(.playlist(id)) }
+        sync { try await SyncService.deletePlaylist(id: id) }
     }
 
     /// Adds to the end, once; a question already there stays where it is.
@@ -318,6 +436,7 @@ final class AppState {
         guard let index = playlists.firstIndex(where: { $0.id == id }),
               !playlists[index].questionIDs.contains(question.id) else { return }
         playlists[index].questionIDs.append(question.id)
+        syncPlaylist(id)
     }
 
     func remove(_ question: Question, from collection: QuestionCollection) {
@@ -327,7 +446,14 @@ final class AppState {
         case .playlist(let id):
             guard let index = playlists.firstIndex(where: { $0.id == id }) else { return }
             playlists[index].questionIDs.removeAll { $0 == question.id }
+            syncPlaylist(id)
         }
+    }
+
+    /// Saves a playlist as it now is.
+    private func syncPlaylist(_ id: QuestionPlaylist.ID) {
+        guard let playlist = playlist(id: id) else { return }
+        sync { try await SyncService.save(playlist) }
     }
 
     // MARK: - Upcoming interview
@@ -348,10 +474,12 @@ final class AppState {
             upcomingInterviews.append(interview)
         }
         upcomingInterviews.sort { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }
+        sync { try await SyncService.save(interview) }
     }
 
     func removeUpcomingInterview(id: Interview.ID) {
         upcomingInterviews.removeAll { $0.id == id }
+        sync { try await SyncService.deleteInterview(id: id) }
         for index in tailoredResumes.indices where tailoredResumes[index].interviewID == id {
             tailoredResumes[index].interviewID = nil
         }
@@ -396,12 +524,15 @@ final class AppState {
     /// read from here, so they update immediately.
     @discardableResult
     func saveInterview(_ session: MockInterviewService, usedResume: Bool) -> Rehearsal {
-        let feedback = MockFeedbackService.feedback(
+        var feedback = MockFeedbackService.feedback(
             for: session.interview,
             plannedTurns: session.turns,
             answeredTurns: session.answeredTurns,
             usedResume: usedResume
         )
+        // The interview's measurements, from every answer that was heard.
+        feedback.measurements = SpeechMeasurer.combine(session.transcript.compactMap(\.measurements))
+        feedback.overall = feedback.scoredTotal
         let rehearsal = Rehearsal(
             kind: .interview,
             date: .now,
@@ -410,6 +541,8 @@ final class AppState {
             transcript: session.transcript
         )
         rehearsals.insert(rehearsal, at: 0)
+        let realIDs = realInterviewIDs
+        sync { try await SyncService.save(rehearsal, realInterviewIDs: realIDs) }
         return rehearsal
     }
 
@@ -437,18 +570,70 @@ final class AppState {
 
     // MARK: - Practice
 
-    func savePractice(_ question: Question, focus: Skill?) {
-        rehearsals.insert(
-            Rehearsal(kind: .practice, date: .now, practiceQuestion: question, practiceFocus: focus),
-            at: 0
+    func savePractice(_ question: Question, focus: Skill?, answer: SpokenAnswer? = nil) {
+        let transcript = answer.map {
+            [TranscriptEntry(question: question.text, answer: $0.text, isFollowUp: false, measurements: $0.measurements)]
+        } ?? []
+        let rehearsal = Rehearsal(kind: .practice, date: .now, transcript: transcript, practiceQuestion: question, practiceFocus: focus)
+        rehearsals.insert(rehearsal, at: 0)
+        let realIDs = realInterviewIDs
+        sync { try await SyncService.save(rehearsal, realInterviewIDs: realIDs) }
+    }
+
+    // MARK: - Account data
+
+    /// The account's saved interviews, so a rehearsal of one links to it.
+    private var realInterviewIDs: Set<Interview.ID> {
+        Set((upcomingInterviews + completedInterviews).map(\.id))
+    }
+
+    /// Puts the account's saved data in place: interviews still to come
+    /// stay upcoming, the rest are completed, most recent first.
+    func apply(_ data: SyncService.Account) {
+        let now = Date.now
+        upcomingInterviews = data.interviews.filter { ($0.date ?? .distantFuture) >= now }
+        completedInterviews = data.interviews.filter { ($0.date ?? .distantFuture) < now }.reversed()
+        library = data.questions
+        let questions = data.questions
+        Task { await QuestionCache.save(questions) }
+        rehearsals = data.rehearsals
+        playlists = data.playlists
+        if let profile = data.profile {
+            if !profile.fullName.isEmpty {
+                candidateName = profile.fullName.split(separator: " ").first.map(String.init) ?? candidateName
+            }
+            targetRole = profile.targetRole
+            experienceLevel = profile.experienceLevel
+            flagsFillerWords = profile.flagsFillerWords
+            remindersOn = profile.remindersOn
+            // Saved as the candidate left it; never saved keeps the starters.
+            if let saved = profile.savedQuestionIDs { savedQuestionIDs = saved }
+        }
+    }
+
+    /// The profile as it should be saved: the account's full name, the
+    /// rest from what's on screen.
+    var profileSnapshot: SyncService.Profile? {
+        guard let account else { return nil }
+        return SyncService.Profile(
+            fullName: account.fullName.isEmpty ? candidateName : account.fullName,
+            targetRole: targetRole,
+            experienceLevel: experienceLevel,
+            flagsFillerWords: flagsFillerWords,
+            remindersOn: remindersOn,
+            savedQuestionIDs: savedQuestionIDs
         )
     }
 
     // MARK: - Resume
 
-    /// Stands in for reading a file. Documents parse; a photo fails, so the
-    /// error state can be demonstrated.
+    /// Reads a picked file's real text. A name with no picked file behind it
+    /// (the scanner, the demo) stands in as before: documents parse, a photo
+    /// fails, so the error state can be demonstrated.
     static func readResume(named fileName: String) async -> ResumeStatus {
+        if let file = ResumeReader.keptFile(named: fileName) {
+            return await ResumeReader.read(file)
+        }
         try? await Task.sleep(for: .seconds(2.2))
         let photo = ["heic", "jpg", "jpeg", "png"].contains((fileName as NSString).pathExtension.lowercased())
         if fileName == MockData.unreadableResumeFileName || photo {
@@ -462,18 +647,29 @@ final class AppState {
     /// Adds or replaces the Profile resume. Tailored versions were made from
     /// the old file, so they go with it.
     func uploadResume(named fileName: String) async {
+        let previous = resume.context
         resume = .parsing(fileName: fileName)
         let result = await Self.readResume(named: fileName)
         guard resume == .parsing(fileName: fileName) else { return }
         resume = result
-        if result.context != nil { tailoredResumes = [] }
+        if result.context != nil {
+            tailoredResumes = []
+            archive(previous)
+        }
     }
 
     /// A resume written by the builder becomes the Profile one. Tailored
     /// versions were made from the old one, so they go.
     func useBuiltResume(_ context: ResumeContext) {
+        archive(resume.context)
         resume = .ready(context)
         tailoredResumes = []
+    }
+
+    /// Keeps a replaced Profile resume in the library.
+    private func archive(_ context: ResumeContext?) {
+        guard let context else { return }
+        pastResumes.insert(PastResume(context: context, uploadedOn: .now), at: 0)
     }
 
     func removeResume() {

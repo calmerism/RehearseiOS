@@ -1013,6 +1013,9 @@ struct QuestionRow: View {
     /// message's date on the right, instead of straight after the gray text.
     /// The question above keeps the row's full width.
     var practicedOnTrailing = false
+    /// Long questions end in an ellipsis, as Mail previews a message; the
+    /// question's own page shows all of it.
+    var lineLimit = 3
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
@@ -1020,10 +1023,13 @@ struct QuestionRow: View {
             Text(question.text)
                 .font(font)
                 .foregroundStyle(Color.primary)
+                .lineLimit(lineLimit)
+                .truncationMode(.tail)
             HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.xs) {
                 Text(endsWithPeriod ? question.metaText + "." : question.metaText)
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
                 if isPracticed {
                     if practicedOnTrailing { Spacer(minLength: AppTheme.Spacing.xs) }
                     PracticedLabel()

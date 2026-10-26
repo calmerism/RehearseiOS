@@ -66,12 +66,10 @@ struct RootView: View {
     private func tab<Content: View>(_ value: AppTab, @ViewBuilder content: () -> Content) -> some View {
         let isSelected = appState.selectedTab == value
         // A fade-through: the old page is gone in a blink, then the new one
-        // fades in and settles from a touch smaller. The two are never
-        // see-through at once, so the switch never looks washed out.
+        // fades in. The two are never see-through at once, so the switch
+        // never looks washed out. No scale: a scaled navigation stack gets
+        // the wrong safe area, so its header lands low and then jumps up.
         return content()
-            .animation(isSelected ? .smooth(duration: 0.32).delay(0.06) : nil) {
-                $0.scaleEffect(isSelected ? 1 : 0.98)
-            }
             .animation(isSelected ? .easeOut(duration: 0.18).delay(0.06) : .easeIn(duration: 0.06)) {
                 $0.opacity(isSelected ? 1 : 0)
             }
@@ -141,12 +139,28 @@ struct Dock: View {
     /// The bar's width with only the two tabs.
     static let compactWidth: CGFloat = (slots - 1) * slotWidth + 2 * inset
     static let morph = Animation.spring(duration: 0.45, bounce: 0.18)
-    /// The button grows from its center once the tabs have made room, and
-    /// shrinks before they close up.
+    /// The button rises out of the bar into the notch as it opens, settling
+    /// with a small overshoot, and sinks back into the bar before the notch
+    /// closes. It starts from most of its size, so it never pops from a dot.
     static let growInSlot = AnyTransition.asymmetric(
-        insertion: .scale(scale: 0.2).combined(with: .opacity).animation(morph.delay(0.14)),
-        removal: .scale(scale: 0.2).combined(with: .opacity).animation(.easeIn(duration: 0.16))
+        insertion: .modifier(
+            active: RiseFromBar(progress: 0),
+            identity: RiseFromBar(progress: 1)
+        ).animation(.spring(duration: 0.5, bounce: 0.3).delay(0.08)),
+        // Closing, it drops straight down into the bar as the notch closes
+        // over it, so the bar seals over the button instead of a ghost of
+        // it fading on top.
+        removal: .modifier(
+            active: TuckIntoBar(progress: 1),
+            identity: TuckIntoBar(progress: 0)
+        ).animation(.easeIn(duration: 0.24))
     )
+    /// Opening: the tabs make room at once, with a little spring. Closing:
+    /// they move with the shrinking button and settle with no bounce or
+    /// long tail, so the bar seals cleanly without a lingering dent.
+    static func barMotion(opening: Bool) -> Animation {
+        opening ? morph : .smooth(duration: 0.3)
+    }
 
     @Binding var selection: AppTab
     /// Off on Home's own page, which starts a mock interview from its card;
@@ -169,15 +183,17 @@ struct Dock: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            // Behind the bar, so closing it tucks the button away under the
+            // bar; it shows through the notch while the notch is open.
+            mockInterviewButton
             background
             tabs
-            mockInterviewButton
         }
         .frame(height: Self.barHeight + Self.rise, alignment: .bottom)
         // Wide enough for three slots with the button in the middle; without
         // it, the two tabs close up into a compact bar.
         .frame(maxWidth: showsMockInterview ? Self.fullWidth : Self.compactWidth)
-        .animation(Self.morph.delay(showsMockInterview ? 0 : 0.14), value: showsMockInterview)
+        .animation(Self.barMotion(opening: showsMockInterview), value: showsMockInterview)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, AppTheme.Spacing.md)
         // Also when something else changes the tab, like finishing an interview.
@@ -203,8 +219,8 @@ struct Dock: View {
             .overlay(shape.stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.12), radius: 14, y: 5)
             .frame(height: Self.barHeight)
-            // The notch opens with the tabs and closes after the button.
-            .animation(Self.morph.delay(showsMockInterview ? 0 : 0.14), value: showsMockInterview)
+            // The notch opens with the tabs and closes round the shrinking button.
+            .animation(Self.barMotion(opening: showsMockInterview), value: showsMockInterview)
     }
 
     private var tabs: some View {
@@ -217,8 +233,8 @@ struct Dock: View {
         }
         .padding(Self.inset)
         .background(alignment: .leading) { indicator }
-        // The tabs make room first and close up last.
-        .animation(Self.morph.delay(showsMockInterview ? 0 : 0.14), value: showsMockInterview)
+        // The tabs make room first and close up as the button shrinks.
+        .animation(Self.barMotion(opening: showsMockInterview), value: showsMockInterview)
         .frame(height: Self.barHeight)
     }
 
@@ -292,7 +308,7 @@ struct Dock: View {
 /// The dock's bar: a capsule whose top edge dips in a rounded notch round the
 /// mock interview button, leaving a little air between the two. `notch` runs
 /// from 0, a plain capsule, to 1, the full notch, so the shape animates.
-struct DockShape: Shape {
+nonisolated struct DockShape: Shape {
     var notch: CGFloat
     /// The button's center, from the bar's top edge, and its radius.
     let discCenterY: CGFloat
@@ -310,6 +326,9 @@ struct DockShape: Shape {
     func path(in rect: CGRect) -> Path {
         let w = rect.width, h = rect.height, r = h / 2
         let cx = rect.midX, cy = discCenterY
+        // A nearly closed notch would leave a small dent in the top edge for
+        // the last moments of the animation, so it snaps shut instead.
+        let notch = notch < 0.25 ? 0 : notch
         let radius = (discRadius + gap) * notch
         let f = fillet * notch
         var points: [CGPoint] = []
@@ -422,6 +441,34 @@ struct MockInterviewDockButton: View {
 #Preview {
     RootView()
         .environment(AppState())
+}
+
+/// How far the mock interview button has dropped into the bar: at 1 it's
+/// fully under the bar, so it's hidden there rather than faded out.
+private struct TuckIntoBar: ViewModifier {
+    var progress: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(1 - 0.15 * progress)
+            .offset(y: progress * 44)
+            // Out of sight only once it's under the bar.
+            .opacity(progress > 0.85 ? 0 : 1)
+    }
+}
+
+/// How far the mock interview button has risen out of the bar: at 0 it sits
+/// low in the bar, a little smaller and blurred; at 1 it's in the notch.
+private struct RiseFromBar: ViewModifier {
+    var progress: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(0.6 + 0.4 * progress, anchor: .bottom)
+            .offset(y: (1 - progress) * 22)
+            .blur(radius: (1 - progress) * 4)
+            .opacity(Double(min(progress * 1.6, 1)))
+    }
 }
 
 /// The mock interview button sinks a little while held, then springs back.

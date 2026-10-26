@@ -2,7 +2,7 @@ import Foundation
 
 /// A report for one rehearsal. Scores are a practice signal, never a
 /// prediction of whether the candidate will be hired.
-struct Feedback: Hashable {
+struct Feedback: Hashable, nonisolated Codable {
     var overall: Int
     var communication: Int
     var communicationNote: String
@@ -31,10 +31,17 @@ struct Feedback: Hashable {
 
     /// Points taken off for ending the interview early.
     var deduction: Int = 0
+    /// The answer judge's verdicts for every answered question, and the
+    /// interview's measurements. Nil until real judging and measuring exist,
+    /// and in feedback saved before them; the scores then fall back to the
+    /// estimates.
+    var verdicts: [JudgedPart]?
+    var measurements: Measurements?
 
     /// The six areas the interview is scored on, worked out from its parts.
     var areas: [AreaScore] {
-        Scoring.areas(answerQuality: answerQuality, communication: communication, focus: focus)
+        Scoring.areas(answerQuality: answerQuality, communication: communication, focus: focus,
+                      verdicts: verdicts ?? [], measured: measurements)
     }
 
     /// One answer scored on the same six areas: lifted for a strong answer,
@@ -43,7 +50,8 @@ struct Feedback: Hashable {
         guard let moment = entry.moment else { return [] }
         let answer: Scoring.Answer
         if case .weakness(let skill) = moment.kind { answer = .weak(skill) } else { answer = .strong }
-        return Scoring.areas(answerQuality: answerQuality, communication: communication, focus: focus, for: answer)
+        return Scoring.areas(answerQuality: answerQuality, communication: communication, focus: focus, for: answer,
+                             verdicts: entry.verdicts ?? [], measured: entry.measurements)
     }
 
     /// One answer's score: the average of its six areas.

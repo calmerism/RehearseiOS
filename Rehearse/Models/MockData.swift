@@ -219,6 +219,33 @@ enum MockData {
         return leansBackend ? [finlo, campusEats, balanced] : [campusEats, finlo, balanced]
     }
 
+    /// A returning candidate's tailored versions: one for each upcoming
+    /// interview, and older ones made for interviews already done.
+    static func tailoredHistory(upcoming: [Interview], completed: [Interview]) -> [ResumeVersion] {
+        func daysAgo(_ days: Int) -> Date {
+            Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .now
+        }
+        let interviews = upcoming.map { ($0, 2) } + completed.enumerated().map { ($1, 14 + $0 * 9) }
+        return interviews.compactMap { interview, age in
+            guard var version = tailoredVersions(company: interview.company, role: interview.role).first else { return nil }
+            version.createdOn = daysAgo(age)
+            return version
+        }
+    }
+
+    /// Files that were on the Profile before the current resume.
+    static var pastResumes: [PastResume] {
+        func upload(_ fileName: String, daysAgo: Int) -> PastResume {
+            var context = resume
+            context.fileName = fileName
+            return PastResume(context: context, uploadedOn: Calendar.current.date(byAdding: .day, value: -daysAgo, to: .now) ?? .now)
+        }
+        return [
+            upload("Sukhraj_Resume_Sept.pdf", daysAgo: 34),
+            upload("Sukhraj_CV_2025.pdf", daysAgo: 96)
+        ]
+    }
+
     /// What the role usually asks for that the resume doesn't show.
     private static func tailoringGaps(company: String?, role: String) -> [ResumeGap] {
         if role.localizedCaseInsensitiveContains("backend") {

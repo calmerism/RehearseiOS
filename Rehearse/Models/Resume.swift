@@ -8,6 +8,8 @@ struct ResumeContext: Hashable {
     var skills: [String]
     /// "B.Tech Computer Science, City Engineering College, 2027", when known.
     var education: String? = nil
+    /// The file's own text, when it was read from a real file.
+    var text: String? = nil
 }
 
 /// A project or role the interviewer can ask about.
@@ -50,6 +52,7 @@ struct ResumeVersion: Identifiable, Hashable {
     let gaps: [ResumeGap]
     /// The upcoming interview this version is for. Its mock uses it.
     var interviewID: Interview.ID?
+    var createdOn: Date = .now
 
     /// "Apple", or the role when there's no company.
     var target: String { company ?? role }
@@ -103,6 +106,14 @@ struct ResumeGap: Identifiable, Hashable {
     let title: String
     let detail: String
     let questionID: Question.ID?
+}
+
+/// A resume that was on the Profile before the current one, kept so it can
+/// still be used for a mock.
+struct PastResume: Identifiable, Hashable {
+    let id = UUID()
+    let context: ResumeContext
+    let uploadedOn: Date
 }
 
 /// Which resume a mock interview uses.

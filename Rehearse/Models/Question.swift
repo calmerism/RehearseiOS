@@ -1,6 +1,6 @@
 import Foundation
 
-enum QuestionCategory: String, CaseIterable, Identifiable, Hashable {
+enum QuestionCategory: String, CaseIterable, Identifiable, Hashable, nonisolated Codable {
     case common = "Common"
     case behavioral = "Behavioral"
     case roleBased = "Role-Based"
@@ -8,7 +8,7 @@ enum QuestionCategory: String, CaseIterable, Identifiable, Hashable {
     var id: Self { self }
 }
 
-enum Difficulty: String, CaseIterable, Hashable {
+enum Difficulty: String, CaseIterable, Hashable, nonisolated Codable {
     case easy = "Easy"
     case medium = "Medium"
     case hard = "Hard"
@@ -17,7 +17,7 @@ enum Difficulty: String, CaseIterable, Hashable {
 /// An interview habit that feedback can flag and practice can target. This is
 /// the link that closes the loop: Feedback names a skill, Practice recommends
 /// questions that exercise it.
-enum Skill: String, CaseIterable, Identifiable, Hashable {
+enum Skill: String, CaseIterable, Identifiable, Hashable, nonisolated Codable {
     case answerStructure
     case concreteResults
     case tradeoffs
@@ -75,7 +75,7 @@ enum Skill: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-struct Question: Identifiable, Hashable {
+struct Question: Identifiable, Hashable, nonisolated Codable {
     let id: String
     let text: String
     let category: QuestionCategory
@@ -84,12 +84,26 @@ struct Question: Identifiable, Hashable {
     let role: String?
     /// Skills this question is good practice for.
     let skills: [Skill]
+    /// The subject it's from, as the bank groups it: "system-design", "ios".
+    /// Nil for the prototype's own questions.
+    var area: String? = nil
+
+    /// "System Design", "iOS", for the Library's filter.
+    var areaTitle: String? { area.map(Question.title(forArea:)) }
+
+    static func title(forArea area: String) -> String {
+        let special = ["ios": "iOS", "sre": "SRE", "nlp": "NLP", "llm-ops": "LLM Ops", "unix": "Unix",
+                       "devops": "DevOps", "generative-ai": "Generative AI", "react-native": "React Native"]
+        if let name = special[area] { return name }
+        return area.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+    }
 
     var roleLabel: String { role ?? "Any role" }
 
-    /// "Medium behavioral question" or "Hard role-based question for iOS Engineer".
+    /// "Medium behavioral question", or "Hard question for iOS Engineer":
+    /// a role says more than "role-based", and keeps the line short.
     var metaText: String {
-        let base = "\(difficulty.rawValue) \(category.rawValue.lowercased()) question"
-        return role.map { "\(base) for \($0)" } ?? base
+        if let role { return "\(difficulty.rawValue) question for \(role)" }
+        return "\(difficulty.rawValue) \(category.rawValue.lowercased()) question"
     }
 }

@@ -99,7 +99,9 @@ struct ResumeView: View {
                         .font(.headline)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text("\(context.highlights.count) projects and \(context.skills.count) skills")
+                    Text(context.highlights.isEmpty
+                         ? "\(context.skills.count) skills found"
+                         : "\(context.highlights.count) projects and \(context.skills.count) skills")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -108,6 +110,7 @@ struct ResumeView: View {
             .accessibilityElement(children: .combine)
         }
 
+        if !context.highlights.isEmpty {
         Section {
             ForEach(context.highlights) { highlight in
                 VStack(alignment: .leading, spacing: 2) {
@@ -123,6 +126,19 @@ struct ResumeView: View {
         } header: {
             Text("You’ll Be Asked About")
                 .listHeadingInset()
+        }
+        }
+
+        // A read file's skills, while its projects can't be picked out yet.
+        if context.highlights.isEmpty, !context.skills.isEmpty {
+            Section {
+                Text(context.skills.joined(separator: ", "))
+            } header: {
+                Text("Skills Found")
+                    .listHeadingInset()
+            } footer: {
+                Text("Your interviewer will ask about these.")
+            }
         }
 
         Section {

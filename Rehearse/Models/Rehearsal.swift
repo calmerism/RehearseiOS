@@ -3,7 +3,7 @@ import Foundation
 /// One entry in the candidate's history: a full mock interview, or a single
 /// practiced question.
 struct Rehearsal: Identifiable, Hashable {
-    enum Kind: Hashable {
+    enum Kind: String, Hashable, nonisolated Codable {
         case interview
         case practice
     }
@@ -37,7 +37,7 @@ struct Rehearsal: Identifiable, Hashable {
     }
 }
 
-struct TranscriptEntry: Hashable {
+struct TranscriptEntry: Hashable, nonisolated Codable {
     var question: String
     var answer: String
     var isFollowUp: Bool
@@ -48,6 +48,10 @@ struct TranscriptEntry: Hashable {
     var spokenAnswer: String? = nil
     /// The Hindi parts of `spokenAnswer`, each with its English.
     var hindiLines: [HindiLine] = []
+    /// This answer's verdicts from the answer judge, and what was measured
+    /// while it was given. Nil before real judging and measuring.
+    var verdicts: [JudgedPart]? = nil
+    var measurements: Measurements? = nil
 
     /// The skill this answer fell short on, if any.
     var weakSkill: Skill? {

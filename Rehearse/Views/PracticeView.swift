@@ -162,6 +162,9 @@ struct PracticeSessionView: View {
     @State private var notice: String?
     @State private var result: String?
     @State private var isSaved = false
+    /// What was heard, shown back so the candidate can check it.
+    @State private var heard: SpokenAnswer?
+    @State private var recorder = AnswerRecorder()
 
     var body: some View {
         NavigationStack {
@@ -200,6 +203,16 @@ struct PracticeSessionView: View {
                             Label("How that went", systemImage: "waveform")
                                 .font(.headline)
                             Text(result)
+                            if let heard {
+                                Divider()
+                                    .padding(.vertical, AppTheme.Spacing.xxs)
+                                Text(Self.summary(of: heard.measurements))
+                                    .font(.subheadline.weight(.semibold))
+                                Text("“\(heard.text)”")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(6)
+                            }
                         }
                         .padding(AppTheme.Spacing.md)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -222,6 +235,7 @@ struct PracticeSessionView: View {
                         PrimaryButton(title: "Done") { appState.activePractice = nil }
                         SecondaryButton(title: "Try Again") {
                             result = nil
+                            heard = nil
                             answerState = .ready
                         }
                     }
@@ -236,6 +250,16 @@ struct PracticeSessionView: View {
                 }
             }
         }
+        .onDisappear { recorder.cancel() }
+    }
+
+    /// "142 words a minute, 2 filler words, 1 long pause", from what was measured.
+    private static func summary(of measured: Measurements) -> String {
+        var parts: [String] = []
+        if let pace = measured.wordsPerMinute { parts.append("\(pace) words a minute") }
+        if Scoring.flagsFillerWords, let fillers = measured.fillerWords { parts.append(fillers == 1 ? "1 filler word" : "\(fillers) filler words") }
+        if let pauses = measured.longPauses, pauses > 0 { parts.append(pauses == 1 ? "1 long pause" : "\(pauses) long pauses") }
+        return parts.isEmpty ? "Answer heard" : parts.joined(separator: ", ").prefix(1).uppercased() + parts.joined(separator: ", ").dropFirst()
     }
 
     /// Mirrors the interview: too-short answers aren't captured, and a short
@@ -244,22 +268,46 @@ struct PracticeSessionView: View {
         switch answerState {
         case .ready:
             notice = nil
-            answerState = .recording(startedAt: .now)
+            // The clock starts once the microphone is listening.
+            answerState = .processing
+            Task {
+                do {
+                    try await recorder.start()
+                    answerState = .recording(startedAt: .now)
+                } catch {
+                    notice = error.localizedDescription
+                    answerState = .ready
+                }
+            }
         case .recording(let startedAt):
             guard Date.now.timeIntervalSince(startedAt) >= 2 else {
+                recorder.cancel()
                 notice = "That was too short to catch. Tap when you’re ready and answer out loud."
                 answerState = .ready
                 return
             }
             answerState = .processing
             Task {
-                try? await Task.sleep(for: .seconds(1.2))
+                let spoken: SpokenAnswer?
+                do {
+                    spoken = try await recorder.stop()
+                } catch {
+                    notice = error.localizedDescription
+                    answerState = .ready
+                    return
+                }
                 guard answerState == .processing else { return }
+                guard let spoken else {
+                    notice = "We didn’t catch that. Check your microphone and answer out loud."
+                    answerState = .ready
+                    return
+                }
+                heard = spoken
                 answerState = .captured
                 result = MockFeedbackService.practiceNote(for: focus)
                 // One practice session counts once, however many attempts.
                 if !isSaved {
-                    appState.savePractice(question, focus: focus)
+                    appState.savePractice(question, focus: focus, answer: spoken)
                     isSaved = true
                 }
             }
