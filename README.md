@@ -4,7 +4,7 @@ Practice the interview, not just the questions.
 
 An ongoing group project built to explore and test how real-time mock interviews work on iOS.
 
-This repository currently contains the native iOS UI prototype and client application flows. It is an active work in progress. The live speech-to-text audio pipeline and conversational backend agent are not yet connected; all mock interview sessions, scoring breakdowns, and resume features currently run offline using local mock data and services.
+This repository contains the native iOS app and its Supabase backend. It is an active work in progress. Accounts, sync, the question bank, speech-to-text and reminders are real; the AI interviewer is not connected yet, so interview questions and answer evaluation still come from prepared mock data. Without Supabase keys, the whole app runs offline on that mock data.
 
 Most engineering interview prep boils down to grinding LeetCode or memorizing definitions from a flashcard deck. That works fine for coding syntax tests, but it does almost nothing to prepare you for what an actual technical interview feels like.
 
@@ -15,53 +15,64 @@ Rehearse gives you a place to practice that verbal back-and-forth before it coun
 
 ## How it works
 
-You speak into your iPhone microphone. Rehearse listens, evaluates your answer in real time, and responds conversationally.
+You speak into your iPhone microphone. Rehearse transcribes your answer on the device and measures how you said it: your pace, filler words, long pauses and hedging.
 
-Instead of running down a generic checklist of questions, the interviewer adapts to what you actually say:
+The goal is an interviewer that adapts to what you actually say:
 - Mention ACID guarantees, and it probes how your system behaves during a network partition.
 - Mention sharding, and it asks how you deal with hot partitions and cross-shard queries.
 - Mention Redis, and it asks about your cache invalidation strategy when writes spike.
 
+Those follow-ups need the AI step, which is in progress. Today the questions follow a prepared script.
+
 It keeps track of time just like a real interview (10, 20, or 30 minutes) and moves between topics so you get a well-rounded conversation covering architecture, databases, concurrency, and teamwork.
 
-If you connect a resume, it pulls from your actual past projects and tech stack instead of asking hypothetical questions.
+If you add a resume, Rehearse reads it (PDF, text, or a photo of a printed page) and pulls out your skills and education, so the interview can be about your real projects.
 
 
 ## Targeted practice
 
-At the end of each session, you get feedback broken down into three areas:
-- Technical correctness: Did you explain the concepts accurately?
-- Trade-off articulation: Did you justify your decisions and weigh alternatives?
-- Communication: Was your answer structured and clear?
+At the end of each session, you get a score out of 100 made of six areas:
+- Technical Knowledge: Did you explain the concepts accurately?
+- Problem Solving: Did you lay out a plan and weigh the trade-offs?
+- Communication: Pace, filler words, response time and repeated words, measured from your speech.
+- Project Depth: Did you say why you built things the way you did?
+- Handling Uncertainty: Did you say plainly when you weren't sure, and reason it through?
+- Confidence: Pauses, hedging, whether your voice held steady, and eye contact (from the front camera, on the phone; estimated until that's built).
+
+The judged areas will be scored as a checklist against each question's key points, and code turns that checklist into numbers, so the model never just picks a score.
 
 If you hit Rehearse Again, Rehearse automatically takes the biggest gap identified in that round and brings it up in the next interview. That way you spend time fixing the specific things you struggle to explain out loud.
 
 
 ## What is implemented
 
-The current iOS client includes the complete interface and prototype interactions:
 - Live interview room with timer controls, prompt progression, and answer review
-- Feedback scorecards measuring technical precision, trade-offs, and structure
-- Question library and domain collections
-- Resume viewer, builder, scanner, and job-tailoring flows
-- Onboarding, authentication, and interview readiness history
+- Speech-to-text and speech measurements, on the device
+- Feedback reports across the six areas, showing how each score is worked out
+- A question library of 11,483 questions, with search, difficulty and subject filters, playlists, and a daily Warm Up
+- Accounts with Supabase: email sign up, log in, password reset, Delete Account, and sync of your profile, interviews, practice and playlists
+- Resume reading, viewer, builder, scanner, Resume Library, and job-tailoring flows
+- Interview Reminders: notifications 3 days, 1 day and 2 hours before each upcoming interview
+- Home Screen widgets for your next interview and your latest score
+- Onboarding, progress history, and a launch animation in light and dark
 
-Live audio streaming, dynamic LLM follow-up generation, and backend account persistence are currently in progress.
+In progress: the AI interviewer (follow-up questions and answer judging), syncing resumes, and Sign in with Apple.
 
 
 ## Privacy
 
-Audio input is used exclusively for speech transcription and answer evaluation. No background audio is recorded or stored without your knowledge.
+Audio is used only to transcribe your answers, on your iPhone. Audio is never saved or uploaded; only the transcript is kept.
 
-We do not run facial emotion tracking, eye-contact metrics, or speculative behavioral scores. The feedback is based purely on what you say and how you defend your technical choices.
+Your interviews, transcripts and scores are stored in your own account, and the database only lets each account read its own rows. Reminders are scheduled on the phone and never sent through a server.
+
+We do not run facial emotion tracking or speculative personality scores. Eye contact, once built, is worked out on the phone and no video is saved. The feedback is based on what you say, how you say it, and how you defend your technical choices.
 
 
 ## Running locally
 
 ### Requirements
-- macOS 15.0 or later
-- Xcode 16.0 or later
-- iOS 18.0+ Simulator or connected iPhone
+- macOS with Xcode 26 or later
+- iOS 26+ Simulator or connected iPhone (speech recognition needs a real iPhone)
 
 ### Setup
 
@@ -78,17 +89,29 @@ Open the project in Xcode:
 open Rehearse.xcodeproj
 ```
 
-Select the **Rehearse** scheme and an iOS Simulator (e.g. iPhone 16 Pro) or your connected device, then press **⌘R** (or **Product > Run**).
+Select the **Rehearse** scheme and an iOS Simulator or your connected device, then press **⌘R** (or **Product > Run**).
 
-The app includes built-in mock services and demo data out of the box, allowing you to run and test the complete interview loop, resume viewer, and feedback screens immediately offline.
+Out of the box, the app runs on built-in mock data, so you can try the whole interview loop, resume tools and feedback screens offline.
+
+### Connecting Supabase (optional)
+
+1. Create a Supabase project and run `supabase/schema.sql`, then the files in `supabase/migrations` in order, in the SQL Editor.
+2. Import your questions into the `questions` table.
+3. Put your project URL and **anon** key in `Rehearse/Backend/BackendSecrets.swift`. Never put the service role key in the app.
 
 
 ## Built with
 
-- SwiftUI & Swift 6
-- Modern Observation (`@Observable`)
-- Apple Human Interface Guidelines Design System
-- Adaptive Light & Dark mode architecture
+- SwiftUI & Swift 6, with Observation (`@Observable`)
+- Supabase (Auth, Postgres with row level security, Storage)
+- Speech, AVFoundation, PDFKit and Vision
+- WidgetKit and UserNotifications
+- Apple Human Interface Guidelines, in light and dark mode
+
+
+## Credits
+
+Practice questions come from the [open-interview](https://github.com/open-interview/open-interview) project, used under the MIT licence.
 
 
 ## License
