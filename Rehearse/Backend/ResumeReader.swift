@@ -1,3 +1,4 @@
+import Compression
 import Foundation
 import PDFKit
 import UIKit
@@ -62,11 +63,72 @@ nonisolated enum ResumeReader {
             return attributed?.string ?? ""
         case "heic", "jpg", "jpeg", "png":
             return await recognizeText(in: url)
+        case "docx":
+            return wordText(at: url)
         default:
             // Word files and anything else: whatever plain text there is.
             let attributed = try? NSAttributedString(url: url, options: [:], documentAttributes: nil)
             return attributed?.string ?? ""
         }
+    }
+
+    /// A Word file's text: the body XML out of the zip it's packed in, one
+    /// line per paragraph.
+    static func wordText(at url: URL) -> String {
+        guard let data = try? Data(contentsOf: url),
+              let xmlData = zipEntry(named: "word/document.xml", in: [UInt8](data)),
+              let xml = String(data: xmlData, encoding: .utf8) else { return "" }
+        var text = xml
+            .replacingOccurrences(of: "</w:p>", with: "\n")
+            .replacingOccurrences(of: "<w:tab/>", with: "\t")
+            .replacingOccurrences(of: "<w:br/>", with: "\n")
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        for (entity, character) in [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&apos;", "'"), ("&amp;", "&")] {
+            text = text.replacingOccurrences(of: entity, with: character)
+        }
+        return text
+    }
+
+    /// One file out of a zip archive, read from its central directory.
+    /// Handles the two methods Word uses: stored and deflated.
+    private static func zipEntry(named name: String, in bytes: [UInt8]) -> Data? {
+        func uint16(_ at: Int) -> Int { at + 1 < bytes.count ? Int(bytes[at]) | Int(bytes[at + 1]) << 8 : 0 }
+        func uint32(_ at: Int) -> Int { uint16(at) | uint16(at + 2) << 16 }
+
+        // The end-of-directory record, searched for from the end.
+        guard bytes.count > 22 else { return nil }
+        var end = bytes.count - 22
+        while end >= max(0, bytes.count - 65_557), uint32(end) != 0x0605_4B50 { end -= 1 }
+        guard end >= 0, uint32(end) == 0x0605_4B50 else { return nil }
+
+        var entry = uint32(end + 16)
+        for _ in 0..<uint16(end + 10) {
+            guard uint32(entry) == 0x0201_4B50 else { return nil }
+            let method = uint16(entry + 10)
+            let compressedSize = uint32(entry + 20)
+            let size = uint32(entry + 24)
+            let nameLength = uint16(entry + 28)
+            let headerOffset = uint32(entry + 42)
+            let entryName = String(decoding: bytes[min(entry + 46, bytes.count)..<min(entry + 46 + nameLength, bytes.count)], as: UTF8.self)
+            if entryName == name {
+                guard uint32(headerOffset) == 0x0403_4B50 else { return nil }
+                let start = headerOffset + 30 + uint16(headerOffset + 26) + uint16(headerOffset + 28)
+                guard start + compressedSize <= bytes.count else { return nil }
+                let packed = Array(bytes[start..<start + compressedSize])
+                switch method {
+                case 0:
+                    return Data(packed)
+                case 8:
+                    var output = [UInt8](repeating: 0, count: max(size, 1))
+                    let written = compression_decode_buffer(&output, output.count, packed, packed.count, nil, COMPRESSION_ZLIB)
+                    return written > 0 ? Data(output[..<written]) : nil
+                default:
+                    return nil
+                }
+            }
+            entry += 46 + nameLength + uint16(entry + 30) + uint16(entry + 32)
+        }
+        return nil
     }
 
     /// The text in a photo of a resume, line by line, top to bottom.

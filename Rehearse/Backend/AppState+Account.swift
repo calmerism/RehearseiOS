@@ -65,7 +65,7 @@ extension AppState {
     /// log in again.
     func restoreAccount() async {
         #if DEBUG
-        // `-screen welcome` and `-screen login` show a signed-out app
+        // `-screen login` shows a signed-out app
         // without signing the saved account out.
         let arguments = ProcessInfo.processInfo.arguments
         if let index = arguments.firstIndex(of: "-screen"), arguments.indices.contains(index + 1),
@@ -73,7 +73,6 @@ extension AppState {
         #endif
         guard Backend.isConfigured, !isSignedIn,
               let account = await AuthService.restoredAccount() else { return }
-        hasSeenWelcome = true
         didSignIn(account, isNew: false)
     }
 

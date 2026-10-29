@@ -7,10 +7,19 @@ struct QuestionCollectionView: View {
     @Environment(AppState.self) private var appState
     @State private var naming: PlaylistNameRequest?
     @State private var isConfirmingDelete = false
+    @State private var searchText = ""
 
     private var questions: [Question] { appState.questions(in: collection) }
 
+    /// The collection's questions that match the search, or all of them.
+    private var matchingQuestions: [Question] {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return questions }
+        return questions.filter { $0.text.localizedCaseInsensitiveContains(query) }
+    }
+
     var body: some View {
+        let shown = matchingQuestions
         List {
             Section {
                 header
@@ -26,8 +35,26 @@ struct QuestionCollectionView: View {
                 }
                 .listRowBackground(Color.clear)
             } else {
+                // Searches this collection only, under its buttons.
                 Section {
-                    ForEach(questions) { question in
+                    SearchField(prompt: "Search \(title)", text: $searchText)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                } footer: {
+                    if !searchText.isEmpty, !shown.isEmpty {
+                        Text(shown.count == 1 ? "1 question" : "\(shown.count) questions")
+                            .padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md * 2)
+                    }
+                }
+            }
+
+            if !questions.isEmpty, shown.isEmpty {
+                // The system's own no-results view, naming what was searched.
+                ContentUnavailableView.search(text: searchText)
+                    .listRowBackground(Color.clear)
+            } else if !questions.isEmpty {
+                Section {
+                    ForEach(shown) { question in
                         NavigationLink(value: Route.question(question)) {
                             QuestionRow(question: question, isPracticed: !appState.practiceHistory(for: question).isEmpty, font: .headline, endsWithPeriod: true, practicedOnTrailing: true)
                         }
@@ -37,6 +64,7 @@ struct QuestionCollectionView: View {
             }
         }
         .appListStyle()
+        .scrollDismissesKeyboard(.immediately)
         .navigationTitle(title)
         .toolbar {
             // The header under the artwork already names the playlist, so
@@ -48,19 +76,19 @@ struct QuestionCollectionView: View {
                         Button("Rename", systemImage: "pencil") {
                             naming = PlaylistNameRequest(playlistID: id, name: title)
                         }
-                        Button("Delete Playlist", systemImage: "trash", role: .destructive) {
+                        Button("Delete Collection", systemImage: "trash", role: .destructive) {
                             isConfirmingDelete = true
                         }
                     } label: {
                         Image(systemName: "ellipsis")
                     }
-                    .accessibilityLabel("Playlist options")
+                    .accessibilityLabel("Collection options")
                 }
             }
         }
         .playlistNaming($naming)
         .confirmationDialog("Delete \(title)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-            Button("Delete Playlist", role: .destructive) {
+            Button("Delete Collection", role: .destructive) {
                 if case .playlist(let id) = collection { appState.deletePlaylist(id: id) }
             }
         } message: {
@@ -82,26 +110,28 @@ struct QuestionCollectionView: View {
             }
             .accessibilityElement(children: .combine)
 
-            // Play and Shuffle, as at the top of an album in Music. Practice
-            // is the screen's one filled button; Shuffle stays bordered.
+            // Play and Shuffle, as at the top of an album in Music: the same
+            // size and shape, each with its symbol. Practice is filled, the
+            // screen's one solid button; Shuffle is a soft tint of it.
             HStack(spacing: AppTheme.Spacing.sm) {
                 Button {
                     appState.activePractice = questions.first
                 } label: {
-                    Text("Practice")
+                    Label("Practice", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 Button {
                     appState.activePractice = questions.randomElement()
                 } label: {
-                    Text("Shuffle")
+                    Label("Shuffle", systemImage: "shuffle")
                         .frame(maxWidth: .infinity)
-                        .frame(minHeight: 34)
+                        .frame(minHeight: 50)
+                        .foregroundStyle(AppTheme.brand)
+                        .background(AppTheme.brand.opacity(0.12), in: Capsule())
+                        .contentShape(Capsule())
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .buttonBorderShape(.capsule)
+                .buttonStyle(CardButtonStyle())
             }
             .font(.body.weight(.semibold))
             .disabled(questions.isEmpty)
@@ -112,7 +142,7 @@ struct QuestionCollectionView: View {
 
     private var title: String {
         switch collection {
-        case .playlist(let id): appState.playlist(id: id)?.name ?? "Playlist"
+        case .playlist(let id): appState.playlist(id: id)?.name ?? "Collection"
         default: collection.fixedTitle
         }
     }
@@ -132,7 +162,7 @@ struct QuestionCollectionView: View {
 
     private var emptyMessage: String {
         if case .saved = collection { return "Swipe right on any question to save it here." }
-        return "Touch and hold a question in the library, then choose Add to Playlist."
+        return "Touch and hold a question in the library, then choose Add to Collection."
     }
 }
 
@@ -158,7 +188,7 @@ struct CollectionRow: View {
     }
 
     private var title: String {
-        if case .playlist(let id) = collection { return appState.playlist(id: id)?.name ?? "Playlist" }
+        if case .playlist(let id) = collection { return appState.playlist(id: id)?.name ?? "Collection" }
         return collection.fixedTitle
     }
 }
@@ -206,7 +236,7 @@ extension QuestionCollection {
     var fixedTitle: String {
         switch self {
         case .saved: "Saved"
-        case .playlist: "Playlist"
+        case .playlist: "Collection"
         }
     }
 }
@@ -231,7 +261,7 @@ private struct PlaylistNaming: ViewModifier {
     func body(content: Content) -> some View {
         content
             .alert(
-                request?.playlistID == nil ? "New Playlist" : "Rename Playlist",
+                request?.playlistID == nil ? "New Collection" : "Rename Collection",
                 isPresented: Binding { request != nil } set: { if !$0 { request = nil } },
                 presenting: request
             ) { request in
@@ -314,7 +344,7 @@ struct AddToPlaylistMenu: View {
 
     var body: some View {
         Menu {
-            Button("New Playlist", systemImage: "plus") {
+            Button("New Collection", systemImage: "plus") {
                 naming = PlaylistNameRequest(question: question)
             }
             if !appState.playlists.isEmpty {
@@ -328,12 +358,12 @@ struct AddToPlaylistMenu: View {
                 }
             }
         } label: {
-            Label("Add to Playlist", systemImage: "text.badge.plus")
+            Label("Add to Collection", systemImage: "text.badge.plus")
         }
     }
 }
 
-#Preview("Playlist") {
+#Preview("Collection") {
     let state = AppState()
     NavigationStack { QuestionCollectionView(collection: .playlist(state.playlists[0].id)) }
         .environment(state)

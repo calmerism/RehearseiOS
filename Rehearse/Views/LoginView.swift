@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The way in: the wordmark, Sign in with Apple first, then email and
+/// The way in, and the first screen a new install shows: the wordmark, Sign in with Apple first, then email and
 /// password in one grouped card, as Settings asks for an account. The same
 /// screen creates an account. It behaves like the real thing: the email is
 /// checked, the password can be shown, new passwords show their rules as
@@ -23,6 +23,10 @@ struct LoginView: View {
     @State private var confirmationNotice: String?
     @State private var isResettingPassword = false
     @FocusState private var field: Field?
+    /// Set once any account has signed in here. Until then the screen
+    /// opens on Sign Up, since a new install is most likely a new candidate;
+    /// after that, on Log In.
+    @AppStorage("hasSignedInOnThisDevice") private var hasSignedInOnThisDevice = false
 
     private enum Field { case name, email, password }
     private enum Working { case apple, email }
@@ -116,16 +120,16 @@ struct LoginView: View {
         }
         .onChange(of: email) { emailError = nil }
         .onAppear {
-            // Get Started on the welcome opens straight on Sign Up.
-            if appState.opensSignUp {
-                isCreatingAccount = true
-                appState.opensSignUp = false
-            }
+            isCreatingAccount = !hasSignedInOnThisDevice
+        }
+        .onDisappear {
+            if appState.isSignedIn { hasSignedInOnThisDevice = true }
         }
         #if DEBUG
         .onAppear {
-            // `-signup`, `-loginError` and `-reset` open those states, for screenshots.
+            // `-signup`, `-login`, `-loginError` and `-reset` open those states, for screenshots.
             let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("-login") { isCreatingAccount = false }
             if arguments.contains("-signup") {
                 isCreatingAccount = true
                 name = "Sukhraj"
@@ -150,8 +154,7 @@ struct LoginView: View {
 
     // MARK: - Header
 
-    /// The logo and the wordmark, small, as the welcome pages head
-    /// themselves.
+    /// The logo and the wordmark, small, heading the page.
     private var wordmark: some View {
         HStack(spacing: AppTheme.Spacing.xs) {
             AppLogo(size: 28)
@@ -162,8 +165,7 @@ struct LoginView: View {
         .accessibilityLabel("Rehearse")
     }
 
-    /// The headline and its line, set like the welcome pages': large, bold
-    /// and tight, on the left.
+    /// The headline and its line: large, bold and tight, on the left.
     private var header: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
             Text(isCreatingAccount ? "Create your account." : "Welcome back.")
@@ -227,7 +229,7 @@ struct LoginView: View {
         VStack(spacing: 0) {
             if isCreatingAccount {
                 fieldRow(symbol: "person.fill") {
-                    TextField("Name", text: $name)
+                    TextField("Name", text: $name, prompt: .prompt("Name"))
                         .textContentType(.givenName)
                         .focused($field, equals: .name)
                         .submitLabel(.next)
@@ -236,7 +238,7 @@ struct LoginView: View {
                 Divider().padding(.leading, Self.dividerInset)
             }
             fieldRow(symbol: "envelope.fill") {
-                TextField("Email", text: $email)
+                TextField("Email", text: $email, prompt: .prompt("Email"))
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
@@ -250,9 +252,9 @@ struct LoginView: View {
                 HStack {
                     Group {
                         if showsPassword {
-                            TextField("Password", text: $password)
+                            TextField("Password", text: $password, prompt: .prompt("Password"))
                         } else {
-                            SecureField("Password", text: $password)
+                            SecureField("Password", text: $password, prompt: .prompt("Password"))
                         }
                     }
                     .textContentType(isCreatingAccount ? .newPassword : .password)
@@ -458,8 +460,7 @@ private struct PasswordStrength: View {
 
 // MARK: - The deck
 
-/// What's waiting inside, as cards fanned out like the welcome pages show
-/// the app: the next interview behind, the last score in front. They rise
+/// What's waiting inside, as cards fanned out: the next interview behind, the last score in front. They rise
 /// into place when the screen appears. Signing up, the front card shows
 /// where a first score will go.
 private struct LoginDeck: View {
@@ -592,7 +593,7 @@ private struct ResetPasswordSheet: View {
                     Text("Enter the email you signed up with and we’ll send you a link to reset your password.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    TextField("Email", text: $email)
+                    TextField("Email", text: $email, prompt: .prompt("Email"))
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)

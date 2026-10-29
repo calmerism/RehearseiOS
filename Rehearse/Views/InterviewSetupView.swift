@@ -10,6 +10,7 @@ struct InterviewSetupView: View {
     let mode: SetupMode
 
     @Environment(AppState.self) private var appState
+    @State private var showsPrivacy = false
     @State private var role = ""
     @State private var company = ""
     @State private var type: InterviewType = .technical
@@ -44,6 +45,23 @@ struct InterviewSetupView: View {
         }
         .safeAreaBar(edge: .bottom) {
             BottomActions {
+                // What happens to the camera and microphone, right where
+                // the interview starts, with the details a tap away.
+                Button {
+                    showsPrivacy = true
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.xs) {
+                        Image(systemName: "lock.fill")
+                            .font(.footnote)
+                        Text("No video or audio is recorded. Only the text of your answers is kept. \(Text("How It Works").fontWeight(.semibold).foregroundStyle(AppTheme.brand))")
+                            .font(.footnote)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Explains how your camera and microphone are used")
                 PrimaryButton(title: "Start Interview") {
                     if let interview {
                         appState.startInterview(interview, resume: resumeChoice.flatMap(appState.resumeContext(for:)))
@@ -64,6 +82,10 @@ struct InterviewSetupView: View {
             }
         }
         .resumeSources($resumeSource) { read($0) }
+        .sheet(isPresented: $showsPrivacy) {
+            NavigationStack { InterviewPrivacyView() }
+                .presentationDetents([.large])
+        }
     }
 
     /// The interview that will be rehearsed. For the upcoming interview its
@@ -125,8 +147,8 @@ struct InterviewSetupView: View {
     @ViewBuilder
     private var customContext: some View {
         Section {
-            LabeledTextField(title: "Company", text: $company, prompt: "Optional", contentType: .organizationName)
-            LabeledTextField(title: "Job Role", text: $role, prompt: "Enter Job Role", contentType: .jobTitle)
+            LabeledTextField(title: "Company Name", text: $company, prompt: "Optional", contentType: .organizationName)
+            LabeledTextField(title: "Job Role", text: $role, prompt: "Enter job role", contentType: .jobTitle)
         }
 
         Section {
@@ -134,7 +156,7 @@ struct InterviewSetupView: View {
                 ForEach(Interview.experienceLevels + [Interview.customExperience], id: \.self) { Text($0).tag($0) }
             }
             if experienceLevel == Interview.customExperience {
-                LabeledTextField(title: "Your Level", text: $customExperience, prompt: "Enter Experience Level")
+                LabeledTextField(title: "Your Level", text: $customExperience, prompt: "Enter experience level")
             }
         }
 
@@ -150,23 +172,7 @@ struct InterviewSetupView: View {
 
     /// One choice, checked when chosen, as in Settings.
     private func typeRow(_ option: InterviewType) -> some View {
-        let isSelected = option == type
-        return Button {
-            type = option
-        } label: {
-            HStack(spacing: AppTheme.Spacing.sm) {
-                Text(option.rawValue)
-                    .foregroundStyle(Color.primary)
-                Spacer(minLength: AppTheme.Spacing.xs)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(AppTheme.brand)
-                }
-            }
-            .padding(.vertical, 2)
-        }
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        InterviewTypeRow(type: option, isSelected: option == type) { type = option }
     }
 
     // MARK: - Options
@@ -211,8 +217,10 @@ private extension InterviewSetupView {
                 .padding(.vertical, AppTheme.Spacing.xxs)
             } else if let resumeChoice, let context = appState.resumeContext(for: resumeChoice) {
                 attachedRow(resumeChoice, context: context)
-                profileLink("Change from Profile")
-                Button("Remove Resume", role: .destructive) {
+                profileLink("Choose Another Resume")
+                // Leaves it out of this interview only; the resume itself
+                // stays, so this isn't a red, destructive action.
+                Button("Don’t Use a Resume") {
                     withAnimation { self.resumeChoice = nil }
                 }
             } else {
@@ -227,7 +235,7 @@ private extension InterviewSetupView {
                     .padding(.vertical, AppTheme.Spacing.xxs)
                 }
                 if appState.resume.context != nil {
-                    profileLink("Choose from Profile")
+                    profileLink("Choose Resume")
                 }
                 Button("Upload New File", systemImage: "doc.badge.plus") { resumeSource = .file }
             }
@@ -255,7 +263,7 @@ private extension InterviewSetupView {
         switch choice {
         case .original:
             title = context.fileName
-            subtitle = "From your Profile"
+            subtitle = "Your resume"
         case .tailored(let id):
             let version = appState.tailoredResume(id: id)
             title = "Tailored for \(version?.target ?? "This Role")"
@@ -314,15 +322,6 @@ private extension InterviewSetupView {
     }
 }
 
-private extension InterviewType {
-    var symbol: String {
-        switch self {
-        case .technical: "chevron.left.forwardslash.chevron.right"
-        case .nonTechnical: "person.2"
-        }
-    }
-}
-
 #Preview("Upcoming") {
     NavigationStack { InterviewSetupView(mode: .upcoming(MockData.upcomingInterview.id)) }
         .environment(AppState())
@@ -331,4 +330,47 @@ private extension InterviewType {
 #Preview("Custom") {
     NavigationStack { InterviewSetupView(mode: .custom) }
         .environment(AppState(scenario: .newUser))
+}
+
+/// How the interview uses the camera and microphone, and what's kept, in
+/// plain words. Every line here is true of the app as built.
+struct InterviewPrivacyView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                row("Camera", "Not used. The picture of you in the call is a placeholder; the camera never turns on.", "video.slash.fill")
+                row("Microphone", "Listens only while you answer, to turn what you say into text. On iPhones that support it this happens on the device; otherwise Apple’s speech recognition handles it.", "mic.fill")
+                row("What’s Kept", "The text of your answers and your scores, on your iPhone and in your Rehearse account when you’re signed in.", "tray.full.fill")
+                row("What’s Not Kept", "Audio and video. Nothing is recorded.", "xmark.circle.fill")
+            }
+        }
+        .appListStyle()
+        .navigationTitle("Your Privacy")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+            }
+        }
+    }
+
+    private func row(_ title: String, _ detail: String, _ symbol: String) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: symbol)
+                .foregroundStyle(AppTheme.brand)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+    }
 }

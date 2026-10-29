@@ -10,6 +10,11 @@ enum AppTheme {
     /// Peach-orange accent: buttons, links, rings, the next interview.
     /// Every color that draws text clears WCAG AA, 4.5:1, on both the card
     /// and the grouped page behind it, in light and dark mode.
+    /// The widest a page gets: a little wider than the largest iPhone
+    /// (440 pt), so every iPhone looks as designed and wider screens keep
+    /// a phone-width column.
+    static let maxPageWidth: CGFloat = 520
+
     static let brand = Color.adaptive(light: 0xB5501E, dark: 0xE8743A)
     /// Rings, bars and artwork carry no text, so they keep the brighter
     /// orange (3:1 is the bar for graphics).

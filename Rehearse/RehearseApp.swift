@@ -13,19 +13,18 @@ struct RehearseApp: App {
         UNUserNotificationCenter.current().delegate = ReminderTapHandler.shared
     }
 
+    private var remindersActive: Bool {
+        appState.remindersOn && appState.isSignedIn && !appState.needsProfileSetup
+    }
+
     var body: some Scene {
         WindowGroup {
-            // First launch: a welcome, then an account, then the profile a
-            // new account sets up, then the app.
+            // Straight to an account, then the profile a new account sets
+            // up, then the app.
             Group {
                 if !appState.isSignedIn {
-                    if appState.hasSeenWelcome {
-                        LoginView()
-                            .transition(.opacity)
-                    } else {
-                        WelcomeView()
-                            .transition(.opacity)
-                    }
+                    LoginView()
+                        .transition(.opacity)
                 } else if appState.needsProfileSetup {
                     ProfileSetupView()
                         .transition(.opacity)
@@ -34,6 +33,7 @@ struct RehearseApp: App {
                         .transition(.opacity)
                 }
             }
+            .phoneWidth()
             .environment(appState)
             .tint(AppTheme.brand)
             // The launch screen's suit on black, lifting away to the app.
@@ -51,9 +51,11 @@ struct RehearseApp: App {
             .task(id: appState.isSignedIn) {
                 if appState.isSignedIn { ReminderTapHandler.shared.open = { appState.open($0) } }
             }
-            // Interview Reminders follow the upcoming interviews.
-            .task(id: ReminderPlan(on: appState.remindersOn && appState.isSignedIn, interviews: appState.upcomingInterviews)) {
-                await InterviewReminders.update(for: appState.upcomingInterviews, on: appState.remindersOn && appState.isSignedIn)
+            // Interview Reminders follow the upcoming interviews. Not during
+            // profile setup, which asks about notifications in its own step
+            // rather than as soon as an interview is added.
+            .task(id: ReminderPlan(on: remindersActive, interviews: appState.upcomingInterviews)) {
+                await InterviewReminders.update(for: appState.upcomingInterviews, on: remindersActive)
                 #if DEBUG
                 if appState.remindersOn { await InterviewReminders.scheduleTestReminderIfAsked(for: appState.upcomingInterviews) }
                 await InterviewReminders.logScheduledIfAsked()

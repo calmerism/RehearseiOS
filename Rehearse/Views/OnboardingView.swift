@@ -1,350 +1,6 @@
+import QuickLook
 import SwiftUI
-
-// MARK: - Welcome
-
-/// The first thing a new install shows: a welcome with the app's icon, then
-/// two pages that each show a live piece of the app rather than describe it:
-/// a score filling in, and a real interview on its way. Get Started opens
-/// Sign Up; an existing account goes to Log In.
-struct WelcomeView: View {
-    @Environment(AppState.self) private var appState
-    @State private var page = 0
-
-    private let pages: [(title: String, detail: String)] = [
-        ("Practice out loud.", "Speak your answers to real interview questions, one at a time."),
-        ("See exactly how you did.", "Scored on the six things interviewers look for."),
-        ("Ready for the real one.", "Add the date, and every practice gets you ready for that interview."),
-    ]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text("\(Text("Rehearse").tracking(-0.6))\(Text(".").foregroundStyle(AppTheme.brand))")
-                .font(.title3.bold())
-                .padding(.top, AppTheme.Spacing.xs)
-                .accessibilityLabel("Rehearse")
-
-            TabView(selection: $page) {
-                ForEach(pages.indices, id: \.self) { index in
-                    WelcomePage(index: index, isActive: page == index, title: pages[index].title, detail: pages[index].detail)
-                        .tag(index)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-
-            VStack(spacing: AppTheme.Spacing.md) {
-                PageDots(count: pages.count, current: page)
-                PrimaryButton(title: page == pages.count - 1 ? "Get Started" : "Continue") {
-                    if page < pages.count - 1 {
-                        withAnimation(.smooth(duration: 0.4)) { page += 1 }
-                    } else {
-                        appState.opensSignUp = true
-                        withAnimation(.smooth(duration: 0.4)) { appState.hasSeenWelcome = true }
-                    }
-                }
-                Button("I Already Have an Account") {
-                    withAnimation(.smooth(duration: 0.4)) { appState.hasSeenWelcome = true }
-                }
-                .font(.body.weight(.semibold))
-                .foregroundStyle(AppTheme.brand)
-                .frame(minHeight: 44)
-            }
-            .padding(.horizontal, AppTheme.Spacing.md)
-            .padding(.bottom, AppTheme.Spacing.xs)
-        }
-        .frame(maxWidth: 500)
-        .frame(maxWidth: .infinity)
-        .groupedBackground()
-        #if DEBUG
-        .onAppear {
-            // `-page N` opens the welcome at a page, for screenshots.
-            let arguments = ProcessInfo.processInfo.arguments
-            if let index = arguments.firstIndex(of: "-page"), arguments.indices.contains(index + 1),
-               let number = Int(arguments[index + 1]) { page = number }
-        }
-        #endif
-    }
-}
-
-/// Which page is showing: the current one a longer capsule, as the system's
-/// own page control does.
-private struct PageDots: View {
-    let count: Int
-    let current: Int
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<count, id: \.self) { index in
-                Capsule()
-                    .fill(index == current ? AppTheme.graphic : AppTheme.track)
-                    .frame(width: index == current ? 20 : 7, height: 7)
-            }
-        }
-        .animation(.smooth(duration: 0.3), value: current)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Page \(current + 1) of \(count)")
-    }
-}
-
-/// One welcome page: the piece of the app it's about, then a headline and a
-/// line. The piece plays when its page comes into view.
-private struct WelcomePage: View {
-    let index: Int
-    let isActive: Bool
-    let title: String
-    let detail: String
-
-    var body: some View {
-        VStack(spacing: AppTheme.Spacing.xl) {
-            Group {
-                switch index {
-                case 0: QuestionVignette(isActive: isActive)
-                case 1: ScoreVignette(isActive: isActive)
-                default: UpcomingVignette(isActive: isActive)
-                }
-            }
-            .frame(maxHeight: .infinity)
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                Text(title)
-                    .font(.system(size: 38, weight: .bold))
-                    .tracking(-1)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(detail)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, AppTheme.Spacing.xs)
-            .padding(.bottom, AppTheme.Spacing.md)
-        }
-        .padding(.horizontal, AppTheme.Spacing.md)
-        .padding(.top, AppTheme.Spacing.md)
-    }
-}
-
-/// Questions as a deck, as the Library keeps them: two waiting behind, and
-/// the one on top being asked, word by word, with the button to answer it
-/// starting to record once it's been said.
-private struct QuestionVignette: View {
-    let isActive: Bool
-    @State private var replay = 0
-    @State private var isRecording = false
-    /// The question fades out before it's asked again, so the loop never jumps.
-    @State private var questionShown = true
-
-    var body: some View {
-        ZStack {
-            // The questions still to come, tucked behind.
-            ForEach([(-7.0, 0.6, 30.0, 34.0), (5.0, 0.85, 16.0, 18.0)], id: \.0) { angle, opacity, inset, drop in
-                RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
-                    .frame(height: 220)
-                    .padding(.horizontal, inset)
-                    .rotationEffect(.degrees(angle))
-                    .offset(y: drop)
-                    .opacity(opacity)
-                    .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
-            }
-            card
-        }
-        .padding(.horizontal, AppTheme.Spacing.xs)
-        .task(id: isActive) {
-            guard isActive else { return }
-            replay += 1
-            while !Task.isCancelled {
-                // Asked, word by word.
-                try? await Task.sleep(for: .seconds(2.9))
-                // Answered.
-                withAnimation(.spring(duration: 0.5, bounce: 0.15)) { isRecording = true }
-                try? await Task.sleep(for: .seconds(2.4))
-                // Eased out together, then asked again.
-                withAnimation(.easeInOut(duration: 0.45)) {
-                    isRecording = false
-                    questionShown = false
-                }
-                try? await Task.sleep(for: .seconds(0.5))
-                replay += 1
-                withAnimation(.easeOut(duration: 0.25)) { questionShown = true }
-            }
-        }
-    }
-
-    private var card: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            Text("Question 1 of 4")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-            RevealingQuestion(text: "Tell me about a project you’re proud of.", font: .system(size: 24, weight: .semibold), replay: replay)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .opacity(questionShown ? 1 : 0)
-                .blur(radius: questionShown ? 0 : 4)
-            Spacer(minLength: 0)
-            HStack(spacing: AppTheme.Spacing.sm) {
-                ZStack {
-                    Circle()
-                        .strokeBorder(isRecording ? AppTheme.record.opacity(0.35) : Color(.systemGray4), lineWidth: 3)
-                        .frame(width: 50, height: 50)
-                    RoundedRectangle(cornerRadius: isRecording ? 5 : 20, style: .continuous)
-                        .fill(isRecording ? AppTheme.record : AppTheme.buttonFill)
-                        .frame(width: isRecording ? 18 : 40, height: isRecording ? 18 : 40)
-                        .overlay {
-                            Image(systemName: "mic.fill")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .scaleEffect(isRecording ? 0.3 : 1)
-                                .opacity(isRecording ? 0 : 1)
-                        }
-                }
-                Text(isRecording ? "Listening" : "Tap to answer")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(isRecording ? AppTheme.record : Color.secondary)
-                    .contentTransition(.opacity)
-            }
-        }
-        .padding(AppTheme.Spacing.lg)
-        .frame(height: 230)
-        .cardBackground()
-        .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("An interview question, and the button to answer it")
-    }
-}
-
-/// A score filling in, with the six areas interviewers look for behind it.
-private struct ScoreVignette: View {
-    let isActive: Bool
-    @State private var shown = false
-
-    /// The tallest a bar grows, at 100.
-    private static let barHeight: CGFloat = 130
-
-    /// All six areas the score is the average of: (78 + 71 + 87 + 78 + 74 + 80) / 6.
-    private let areas: [(ScoreArea, Int)] = [(.technical, 78), (.problemSolving, 71), (.communication, 87), (.projectDepth, 78), (.uncertainty, 74), (.confidence, 80)]
-
-    var body: some View {
-        // The score, then its six areas as bars that grow in, side by side,
-        // as Screen Time charts a week: each with its score above and its
-        // symbol below. Pictures rather than a table of words.
-        VStack(spacing: AppTheme.Spacing.xl) {
-            ScoreRing(score: 78, caption: "out of 100", size: 140)
-                .id(isActive)
-            HStack(alignment: .bottom, spacing: AppTheme.Spacing.md) {
-                ForEach(Array(areas.enumerated()), id: \.offset) { offset, item in
-                    VStack(spacing: AppTheme.Spacing.xs) {
-                        Text("\(item.1)")
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                            .opacity(shown ? 1 : 0)
-                        // A full-height track with the score filled from the
-                        // bottom, in the ring's color for that score.
-                        Capsule()
-                            .fill(AppTheme.track)
-                            .frame(width: 26, height: Self.barHeight)
-                            .overlay(alignment: .bottom) {
-                                Capsule()
-                                    .fill(ScoreRing.color(for: item.1))
-                                    .frame(height: shown ? Self.barHeight * CGFloat(item.1) / 100 : 26)
-                            }
-                        Image(systemName: item.0.symbol)
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .frame(height: 24)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .animation(.spring(duration: 0.7, bounce: 0.2).delay(0.3 + Double(offset) * 0.08), value: shown)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(item.0.title), \(item.1)")
-                }
-            }
-            .frame(height: Self.barHeight + 70, alignment: .bottom)
-            .padding(.horizontal, AppTheme.Spacing.lg)
-        }
-        .onChange(of: isActive, initial: true) { _, active in
-            shown = false
-            if active {
-                Task {
-                    try? await Task.sleep(for: .seconds(0.1))
-                    shown = true
-                }
-            }
-        }
-    }
-}
-
-/// The candidate's real interview on its stack, and the reminder for it
-/// sliding in, as it would on the Lock Screen.
-private struct UpcomingVignette: View {
-    let isActive: Bool
-    @State private var showsBanner = false
-
-    var body: some View {
-        VStack(spacing: AppTheme.Spacing.lg) {
-            NotificationPreview(title: "Apple interview in 3 days", message: "A quick practice now keeps your answers sharp.")
-                .opacity(showsBanner ? 1 : 0)
-                .offset(y: showsBanner ? 0 : -24)
-                .scaleEffect(showsBanner ? 1 : 0.96)
-            ZStack(alignment: .top) {
-                // The next ones peek out beneath, as on Home.
-                RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground).opacity(0.6))
-                    .frame(height: 170)
-                    .padding(.horizontal, 28)
-                    .offset(y: 20)
-                RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground).opacity(0.85))
-                    .frame(height: 170)
-                    .padding(.horizontal, 14)
-                    .offset(y: 10)
-                interviewCard
-            }
-            .padding(.bottom, 20)
-        }
-        .onChange(of: isActive, initial: true) { _, active in
-            showsBanner = false
-            guard active else { return }
-            withAnimation(.spring(duration: 0.6, bounce: 0.3).delay(0.5)) { showsBanner = true }
-        }
-    }
-
-    private var interviewCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Apple")
-                        .cardTitleStyle()
-                    Text("Software Engineer")
-                }
-                Spacer()
-                VStack(spacing: -2) {
-                    Text("OCT")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text("15")
-                        .font(.title2.bold())
-                }
-                .frame(width: 56, height: 56)
-                .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            Text("In 3 days at 3:00 PM")
-                .font(.subheadline.weight(.medium))
-            HStack {
-                Text("Not practiced yet")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Label("Quick Prep", systemImage: "bolt.fill")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, AppTheme.Spacing.lg)
-                    .frame(minHeight: 44)
-                    .background(AppTheme.buttonFill, in: Capsule())
-            }
-        }
-        .padding(AppTheme.Spacing.md)
-        .cardBackground()
-        .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
-        .accessibilityElement(children: .combine)
-    }
-}
+import UserNotifications
 
 /// A notification as iOS draws one: the app's icon, its name and the time,
 /// the title and the message, on a frosted banner.
@@ -380,32 +36,49 @@ struct NotificationPreview: View {
 
 // MARK: - Profile setup
 
-/// A new account's profile, a question at a time: the role, the experience
-/// level, a real interview if there is one, the resume and reminders, then
-/// a summary that opens Home. Anything optional can be skipped, and every
-/// answer can be changed later in Profile.
+/// A new account's profile, a question at a time: the role, where they are
+/// in their career, a real interview if there is one, the resume and
+/// notifications, then a finish that opens the first interview or Home.
+/// Anything optional can be skipped, every answer stays put going back and
+/// forth, and all of it can be changed later in Profile.
 struct ProfileSetupView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     private enum Step: Int, CaseIterable {
-        case role, experience, interview, resume, reminders, done
+        case role, experience, interview, resume, notifications, done
     }
 
     @State private var step: Step = .role
     @State private var movingForward = true
-    @State private var role = ""
-    @State private var experience = Interview.experienceLevels[0]
-    @State private var customExperience = ""
+    /// One of `roles`' titles, or `otherRole` for a role typed in.
+    @State private var roleChoice: String?
+    @State private var otherRole = ""
+    @State private var stage: CareerStage?
+    @State private var studyYear = 2
+    @State private var workYears = 3
     @State private var hasInterview: Bool?
     @State private var company = ""
     @State private var interviewDate = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
     @State private var interviewType: InterviewType = .technical
     @State private var resumeSource: ResumeSource?
-    @State private var isReadingResume = false
-    @State private var couldNotRead = false
-    @FocusState private var isTyping: Bool
+    /// The file being read, while it's read.
+    @State private var readingFileName: String?
+    @State private var readError: String?
+    /// The picked file the current resume was read from; a resume with any
+    /// other name was built from notes.
+    @State private var uploadedFileName: String?
+    @State private var previewURL: URL?
+    @State private var previewUnavailable = false
+    @State private var isConfirmingDelete = false
+    @State private var notificationStatus: UNAuthorizationStatus?
+    @State private var isAskingForNotifications = false
+    @FocusState private var focusedField: Field?
 
-    private static let roleSuggestions = ["Software Engineer", "iOS Engineer", "Data Analyst", "Product Designer"]
+    private enum Field { case otherRole, company }
+
+    private static let otherRole = "Other"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -432,16 +105,38 @@ struct ProfileSetupView: View {
         }
         .groupedBackground()
         .resumeSources($resumeSource) { readResume($0) }
+        .quickLookPreview($previewURL)
+        .confirmationDialog("Delete this resume?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+            Button("Delete Resume", role: .destructive) { deleteResume() }
+        } message: {
+            Text(resumeIsBuilt
+                 ? "The resume and the notes it was written from are deleted. You can add another or skip this step."
+                 : "It’s removed from Rehearse. The file in Files isn’t touched. You can add another or skip this step.")
+        }
+        .alert("Can’t Preview This Resume", isPresented: $previewUnavailable) {
+            Button("Choose Again") { resumeSource = .file }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The file is no longer available. Choose it again from Files.")
+        }
+        // Coming back from Settings may have changed the answer.
+        .task(id: step) { if step == .notifications { await refreshNotificationStatus() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, step == .notifications { Task { await refreshNotificationStatus() } }
+        }
         #if DEBUG
         .onAppear {
             // `-step N` opens setup at a step, for screenshots.
             let arguments = ProcessInfo.processInfo.arguments
             if let index = arguments.firstIndex(of: "-step"), arguments.indices.contains(index + 1),
                let number = Int(arguments[index + 1]), let debugStep = Step(rawValue: number) {
-                role = "iOS Engineer"
+                roleChoice = "iOS Engineer"
+                stage = arguments.contains("-professional") ? .professional : .student
                 hasInterview = true
                 company = "Apple"
                 step = debugStep
+                // `-openBuilder` opens Build One for Me over the step.
+                if arguments.contains("-openBuilder") { resumeSource = .build }
             }
         }
         #endif
@@ -463,6 +158,7 @@ struct ProfileSetupView: View {
             .accessibilityLabel("Back")
 
             SegmentedProgress(total: Step.allCases.count - 1, completed: step.rawValue + 1)
+                .accessibilityLabel("Step \(step.rawValue + 1) of \(Step.allCases.count - 1)")
 
             Button("Skip") { advance(skipping: true) }
                 .font(.body)
@@ -474,8 +170,9 @@ struct ProfileSetupView: View {
         .padding(.horizontal, AppTheme.Spacing.xs)
     }
 
+    /// Notifications have their own Not Now, so they don't need a Skip.
     private var isOptional: Bool {
-        [.interview, .resume, .reminders].contains(step)
+        [.interview, .resume].contains(step)
     }
 
     @ViewBuilder
@@ -483,36 +180,11 @@ struct ProfileSetupView: View {
         switch step {
         case .resume:
             VStack(spacing: AppTheme.Spacing.xs) {
-                PrimaryButton(title: appState.resume.context == nil ? "Choose a File" : "Continue") {
-                    if appState.resume.context == nil { resumeSource = .file } else { advance() }
-                }
-                .disabled(isReadingResume)
-                if appState.resume.context == nil {
-                    // No resume yet: one can be written from notes.
-                    Button("Build One for Me") { resumeSource = .build }
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(AppTheme.brand)
-                        .frame(minHeight: 44)
-                        .disabled(isReadingResume)
-                }
+                PrimaryButton(title: "Continue") { advance() }
+                    .disabled(appState.resume.context == nil || readingFileName != nil)
             }
-        case .reminders:
-            VStack(spacing: AppTheme.Spacing.xs) {
-                PrimaryButton(title: "Turn On Reminders") {
-                    // iOS asks for permission; saying no leaves them off.
-                    Task {
-                        appState.remindersOn = await InterviewReminders.requestPermission()
-                        advance()
-                    }
-                }
-                Button("Not Now") {
-                    appState.remindersOn = false
-                    advance()
-                }
-                .font(.body.weight(.semibold))
-                .foregroundStyle(AppTheme.brand)
-                .frame(minHeight: 44)
-            }
+        case .notifications:
+            notificationButtons
         case .done:
             VStack(spacing: AppTheme.Spacing.xs) {
                 PrimaryButton(title: "Start First Interview") {
@@ -533,10 +205,60 @@ struct ProfileSetupView: View {
         }
     }
 
+    /// Asked only while iOS hasn't been asked; once it has, the answer is
+    /// respected and Settings is offered instead of asking again.
+    @ViewBuilder
+    private var notificationButtons: some View {
+        VStack(spacing: AppTheme.Spacing.xs) {
+            switch notificationStatus {
+            case .authorized, .provisional, .ephemeral:
+                PrimaryButton(title: "Continue") {
+                    appState.remindersOn = true
+                    advance()
+                }
+            case .denied:
+                PrimaryButton(title: "Continue") {
+                    appState.remindersOn = false
+                    advance()
+                }
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(AppTheme.brand)
+                .frame(minHeight: 44)
+            default:
+                PrimaryButton(title: "Turn On Notifications") {
+                    isAskingForNotifications = true
+                    Task {
+                        appState.remindersOn = await InterviewReminders.requestPermission()
+                        await refreshNotificationStatus()
+                        isAskingForNotifications = false
+                        advance()
+                    }
+                }
+                .disabled(isAskingForNotifications || notificationStatus == nil)
+                Button("Not Now") {
+                    appState.remindersOn = false
+                    advance()
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(AppTheme.brand)
+                .frame(minHeight: 44)
+                .disabled(isAskingForNotifications)
+            }
+        }
+    }
+
+    private var role: String {
+        let choice = roleChoice == Self.otherRole ? otherRole : (roleChoice ?? "")
+        return choice.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var canContinue: Bool {
         switch step {
-        case .role: !role.trimmingCharacters(in: .whitespaces).isEmpty
-        case .experience: experience != Interview.customExperience || !customExperience.trimmingCharacters(in: .whitespaces).isEmpty
+        case .role: !role.isEmpty
+        case .experience: stage != nil
         case .interview: hasInterview != nil && (hasInterview == false || !company.trimmingCharacters(in: .whitespaces).isEmpty)
         default: true
         }
@@ -551,7 +273,7 @@ struct ProfileSetupView: View {
         case .experience: experienceStep
         case .interview: interviewStep
         case .resume: resumeStep
-        case .reminders: remindersStep
+        case .notifications: notificationsStep
         case .done: doneStep
         }
     }
@@ -568,6 +290,18 @@ struct ProfileSetupView: View {
         }
         .padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md)
         .padding(.bottom, AppTheme.Spacing.xs)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    /// A small label over a group, as Settings heads its sections.
+    private func groupLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md)
+            .padding(.bottom, -AppTheme.Spacing.xs)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private static let roles: [(title: String, symbol: String)] = [
@@ -575,6 +309,8 @@ struct ProfileSetupView: View {
         ("iOS Engineer", "iphone"),
         ("Data Analyst", "chart.bar.xaxis"),
         ("Product Designer", "paintbrush.pointed"),
+        ("Product Manager", "list.bullet.clipboard"),
+        (otherRole, "ellipsis.circle"),
     ]
 
     private var roleStep: some View {
@@ -582,140 +318,278 @@ struct ProfileSetupView: View {
             heading("What role are you preparing for?", "Questions are picked for it.")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(Self.roles, id: \.title) { item in
-                    ChoiceTile(symbol: item.symbol, title: item.title, isSelected: role == item.title) {
-                        role = item.title
-                        isTyping = false
+                    ChoiceTile(symbol: item.symbol, title: item.title, isSelected: roleChoice == item.title) {
+                        roleChoice = item.title
+                        focusedField = item.title == Self.otherRole ? .otherRole : nil
                     }
                 }
             }
-            TextField("Another role", text: Binding(
-                get: { Self.roles.contains { $0.title == role } ? "" : role },
-                set: { role = $0 }
-            ))
-                .focused($isTyping)
-                .submitLabel(.continue)
-                .onSubmit { if canContinue { advance() } }
+            if roleChoice == Self.otherRole {
+                // One field, its prompt saying what to type: a label above
+                // it would only repeat it.
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Image(systemName: "pencil")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(AppTheme.brand)
+                        .frame(width: 24)
+                        .accessibilityHidden(true)
+                    TextField("Your role", text: $otherRole, prompt: .prompt("Enter your role, e.g. QA Engineer"))
+                        .font(.body)
+                        .textContentType(.jobTitle)
+                        .textInputAutocapitalization(.words)
+                        .focused($focusedField, equals: .otherRole)
+                        .submitLabel(.continue)
+                        .onSubmit { if canContinue { advance() } }
+                }
                 .padding(.horizontal, AppTheme.Spacing.md)
-                .frame(minHeight: 52)
-                .cardBackground()
+                .frame(minHeight: 56)
+                .choiceBackground(isSelected: focusedField == .otherRole)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
+        .animation(.smooth(duration: 0.25), value: roleChoice)
     }
-
-    private static let experienceDetails: [String: (symbol: String, detail: String)] = [
-        "Internship": ("graduationcap.fill", "Studying, and after an internship"),
-        "New Graduate": ("star.fill", "Finished studying, after a first job"),
-        Interview.customExperience: ("pencil", "Describe your own level"),
-    ]
 
     private var experienceStep: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
-            heading("How much experience do you have?", "So questions match where you are.")
+            heading("Where are you in your career?", "So questions match where you are.")
             VStack(spacing: 12) {
-                ForEach(Interview.experienceLevels + [Interview.customExperience], id: \.self) { level in
-                    let details = Self.experienceDetails[level] ?? ("person.fill", "")
-                    ChoiceCard(symbol: details.symbol, title: level, detail: details.detail, isSelected: experience == level) {
-                        experience = level
+                ForEach(CareerStage.allCases) { option in
+                    ChoiceCard(symbol: option.symbol, title: option.title, isSelected: stage == option) {
+                        stage = option
                     }
                 }
             }
-            if experience == Interview.customExperience {
-                TextField("Enter Experience Level", text: $customExperience)
-                    .focused($isTyping)
-                    .padding(.horizontal, AppTheme.Spacing.md)
-                    .frame(minHeight: 52)
-                    .cardBackground()
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            switch stage {
+            case .student:
+                ExperienceSlider(
+                    question: "Which year of study are you in?",
+                    value: $studyYear,
+                    range: Experience.studyYears,
+                    minimumLabel: "1st",
+                    maximumLabel: "4th+",
+                    valueText: Experience.studyYearText
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            case .professional:
+                ExperienceSlider(
+                    question: "How many years of professional experience do you have?",
+                    value: $workYears,
+                    range: Experience.workYears,
+                    minimumLabel: "0",
+                    maximumLabel: "20+",
+                    valueText: Experience.workYearsText
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            case .graduate, nil:
+                EmptyView()
             }
         }
-        .animation(.smooth(duration: 0.25), value: experience)
+        .animation(.smooth(duration: 0.3), value: stage)
     }
 
     private var interviewStep: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
-            heading("Do you have an interview coming up?", "We’ll help you prepare for that exact one.")
+            heading("Have an interview coming up?", "We’ll help you prepare for that exact one.")
             HStack(spacing: 12) {
-                ChoiceTile(symbol: "calendar.badge.checkmark", title: "Yes, I do", isSelected: hasInterview == true) { hasInterview = true }
-                ChoiceTile(symbol: "calendar", title: "Not yet", isSelected: hasInterview == false) { hasInterview = false }
+                ChoiceTile(symbol: "calendar.badge.checkmark", title: "Yes, I do", isSelected: hasInterview == true, compact: true) { hasInterview = true }
+                ChoiceTile(symbol: "calendar", title: "Not yet", isSelected: hasInterview == false, compact: true) {
+                    hasInterview = false
+                    focusedField = nil
+                }
             }
 
             if hasInterview == true {
-                VStack(spacing: 0) {
-                    TextField("Company", text: $company)
-                        .focused($isTyping)
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                        .frame(minHeight: 52)
-                    Divider().padding(.leading, AppTheme.Spacing.md)
-                    DatePicker("Date", selection: $interviewDate, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                        .frame(minHeight: 52)
-                    Divider().padding(.leading, AppTheme.Spacing.md)
-                    HStack {
-                        Text("Type")
-                        Spacer()
-                        Picker("Type", selection: $interviewType) {
-                            ForEach(InterviewType.allCases) { Text($0.rawValue).tag($0) }
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
+                    VStack(spacing: 0) {
+                        // A row like Date and Time beneath it: the label on
+                        // the left, the name typed on the right.
+                        HStack(spacing: AppTheme.Spacing.md) {
+                            Text("Company Name")
+                            TextField("Company Name", text: $company, prompt: .prompt("Required"))
+                                .multilineTextAlignment(.trailing)
+                                .textContentType(.organizationName)
+                                .textInputAutocapitalization(.words)
+                                .focused($focusedField, equals: .company)
+                                .submitLabel(.done)
                         }
-                        .labelsHidden()
+                        .padding(.horizontal, AppTheme.Spacing.md)
+                        .frame(minHeight: 52)
+                        Divider().padding(.leading, AppTheme.Spacing.md)
+                        DatePicker("Date and Time", selection: $interviewDate, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
+                            .padding(.horizontal, AppTheme.Spacing.md)
+                            .frame(minHeight: 52)
                     }
-                    .padding(.horizontal, AppTheme.Spacing.md)
-                    .frame(minHeight: 52)
+                    .tint(AppTheme.brand)
+                    .cardBackground()
+
+                    groupLabel("Interview Type")
+                    // Both options in one card; each one's ⓘ says who it's for.
+                    VStack(spacing: 0) {
+                        ForEach(InterviewType.allCases) { option in
+                            if option != InterviewType.allCases.first {
+                                Divider().padding(.leading, AppTheme.Spacing.md + 28 + AppTheme.Spacing.sm)
+                            }
+                            TypeOptionRow(type: option, isSelected: interviewType == option) {
+                                interviewType = option
+                                focusedField = nil
+                            }
+                        }
+                    }
+                    .cardBackground()
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
                 }
-                .tint(AppTheme.brand)
-                .cardBackground()
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .padding(.top, -AppTheme.Spacing.xs)
         .animation(.smooth(duration: 0.3), value: hasInterview)
     }
 
-    /// A page waiting for the resume, then the resume itself.
+    // MARK: Resume
+
+    /// Built from notes rather than read from a picked file.
+    private var resumeIsBuilt: Bool {
+        guard let context = appState.resume.context else { return false }
+        return context.fileName != uploadedFileName
+    }
+
+    /// Two ways in. A file: the dashed area opens Files from anywhere on
+    /// it, then becomes the file with Preview and Replace beneath. No file:
+    /// Build One for Me, with what it involves spelled out.
     private var resumeStep: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
             heading("Add your resume", "You’ll be asked about your own projects, like a real interview. It stays on your phone.")
-            ZStack {
-                if let context = appState.resume.context {
-                    ResumePage(context: context)
-                        .scaleEffect(1.6)
-                        .overlay(alignment: .topTrailing) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title)
-                                .foregroundStyle(.white, AppTheme.practiced)
-                                .offset(x: 50, y: -50)
-                        }
-                        .transition(.scale(scale: 0.9).combined(with: .opacity))
-                } else {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: ResumePage.width * 1.6, height: ResumePage.height * 1.6)
-                        .overlay {
-                            if isReadingResume {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "doc.badge.plus")
-                                    .font(.system(size: 34))
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
+
+            if let context = appState.resume.context, readingFileName == nil {
+                pickedResume(context)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            } else {
+                Button {
+                    resumeSource = .file
+                } label: {
+                    ResumeUploadArea(readingFileName: readingFileName, error: readError)
                 }
+                .buttonStyle(PressableStyle())
+                .disabled(readingFileName != nil)
+                .accessibilityHint("Opens Files to choose a PDF or Word document.")
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: ResumePage.height * 1.6 + 20)
-            .animation(.spring(duration: 0.5, bounce: 0.25), value: appState.resume.context != nil)
-            Text(isReadingResume ? "Reading your resume…" : couldNotRead ? "Couldn’t read that file. Try a PDF or Word file." : appState.resume.context == nil ? "PDF or Word, from Files" : "Questions will use your projects.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
+
+            if appState.resume.context == nil {
+                groupLabel("No Resume Yet?")
+                BuildResumeCard(isBuilt: false) { resumeSource = .build }
+                    .disabled(readingFileName != nil)
+            }
+        }
+        .animation(.smooth(duration: 0.3), value: appState.resume.context)
+        .animation(.smooth(duration: 0.3), value: readingFileName)
+        .animation(.smooth(duration: 0.3), value: readError)
+    }
+
+    /// The resume in use: its first page, its name and where it came from,
+    /// then Preview and Replace as rows, as Files lists a document's actions.
+    private func pickedResume(_ context: ResumeContext) -> some View {
+        VStack(spacing: 0) {
+            // The resume itself opens it: the page to read and edit for a
+            // built one, Quick Look for a file.
+            Button(action: previewResume) {
+                HStack(spacing: AppTheme.Spacing.md) {
+                    ResumePage(context: context, width: 58)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(context.fileName)
+                            .font(.headline)
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                        Label(resumeIsBuilt ? "Built from your notes" : "Uploaded and read", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(AppTheme.practiced)
+                        Text(resumeIsBuilt ? "Tap to preview and edit" : "Tap to preview")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .multilineTextAlignment(.leading)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(.tertiaryLabel))
+                }
+                .padding(AppTheme.Spacing.md)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(resumeIsBuilt ? "Opens the resume to preview and edit" : "Opens a preview of the file")
+
+            Divider().padding(.leading, AppTheme.Spacing.md)
+            ActionRow(title: resumeIsBuilt ? "Upload a File Instead" : "Choose a Different File", symbol: "arrow.triangle.2.circlepath") {
+                resumeSource = .file
+            }
+            Divider().padding(.leading, AppTheme.Spacing.md)
+            ActionRow(title: "Delete Resume", symbol: "trash", isDestructive: true) {
+                isConfirmingDelete = true
+            }
+            if let readError {
+                Divider()
+                Label(readError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.record)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(AppTheme.Spacing.md)
+            }
+        }
+        .cardBackground()
+    }
+
+    /// The picked file in Quick Look (PDF, Word and the rest), or the page
+    /// written from notes, editable.
+    private func previewResume() {
+        if resumeIsBuilt {
+            // The builder opens on the page it wrote, to read and edit. If
+            // its notes weren't kept, they're taken back from the page.
+            if appState.resumeDraft == nil, let context = appState.resume.context {
+                appState.resumeDraft = ResumeDraft(context: context, role: appState.targetRole)
+            }
+            appState.builderOpensOnPage = true
+            resumeSource = .build
+        } else if let name = uploadedFileName, let file = ResumeReader.keptFile(named: name) {
+            previewURL = file
+        } else {
+            previewUnavailable = true
         }
     }
 
-    /// The reminder as it'll arrive, sliding in.
-    private var remindersStep: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.xl) {
-            heading("Stay on track", "A reminder before each interview, and a nudge when it’s time to practice.")
-            ReminderPreview(company: company.isEmpty ? "Your" : company)
+    // MARK: Notifications
+
+    /// The reminder as it'll arrive, sliding in, and where things stand if
+    /// iOS has already been asked.
+    private var notificationsStep: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
+            heading("Turn on notifications", "Get a reminder before each interview you add, and a nudge when it’s time to practice. You can change this anytime in Profile.")
+            ReminderPreview(company: company.trimmingCharacters(in: .whitespaces).isEmpty ? "Your" : company)
+            switch notificationStatus {
+            case .authorized, .provisional, .ephemeral:
+                Label("Notifications are already on for Rehearse.", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.practiced)
+                    .padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md)
+            case .denied:
+                Label("Notifications are off for Rehearse. You can turn them on in Settings whenever you like.", systemImage: "bell.slash")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md)
+            default:
+                EmptyView()
+            }
         }
     }
+
+    private func refreshNotificationStatus() async {
+        notificationStatus = await InterviewReminders.authorizationStatus()
+    }
+
+    // MARK: Done
 
     /// The interview the first one will be: the real one if there is one,
     /// otherwise a technical interview for the chosen role.
@@ -724,48 +598,45 @@ struct ProfileSetupView: View {
         return Interview(role: appState.targetRole, experienceLevel: appState.experienceLevel, type: .technical)
     }
 
-    /// Not a summary of what was just entered, but the first interview,
-    /// ready to start.
+    /// A check that says it's done, then the first interview, ready to start.
     private var doneStep: some View {
         let interview = firstInterview
         let topics = MockInterviewService.topicCapacity(forMinutes: interview.durationMinutes)
         return VStack(spacing: AppTheme.Spacing.lg) {
             VStack(spacing: AppTheme.Spacing.md) {
-                // The real app icon, as the Home Screen will show it.
-                AppLogo(size: 84)
-                    .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
-                    .padding(.top, AppTheme.Spacing.lg)
+                CompletionCheck()
+                    .padding(.top, AppTheme.Spacing.xl)
                 VStack(spacing: AppTheme.Spacing.xs) {
                     Text("You’re all set, \(appState.candidateName).")
                         .font(.system(size: 30, weight: .bold))
                         .tracking(-0.5)
                         .multilineTextAlignment(.center)
-                    Text("Your first interview is ready.")
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Your profile is ready, and so is your first interview.")
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
             }
 
-            // The first interview, ready to start.
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
-                    Text("Your First Interview")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(interview.title)
-                        .font(.headline)
-                    Text("\(interview.type.interviewName), \(topics) questions, about \(interview.durationMinutes) minutes")
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                Text("Your First Interview")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(interview.title)
+                    .font(.headline)
+                Text("\(interview.type.interviewName), \(topics) questions, about \(interview.durationMinutes) minutes")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if appState.resume.context != nil {
+                    Text("Asks about the projects on your resume")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    if appState.resume.context != nil {
-                        Text("Asks about the projects on your resume")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
                 }
-                .padding(AppTheme.Spacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(AppTheme.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .cardBackground()
+            .accessibilityElement(children: .combine)
         }
         .frame(maxWidth: .infinity)
     }
@@ -773,12 +644,13 @@ struct ProfileSetupView: View {
     // MARK: - Moving through
 
     private func advance(skipping: Bool = false) {
-        isTyping = false
+        focusedField = nil
         if !skipping { save() }
         if let next = Step(rawValue: step.rawValue + 1) { go(to: next, forward: true) }
     }
 
     private func go(to next: Step, forward: Bool) {
+        focusedField = nil
         movingForward = forward
         withAnimation(.smooth(duration: 0.35)) { step = next }
     }
@@ -787,53 +659,342 @@ struct ProfileSetupView: View {
     private func save() {
         switch step {
         case .role:
-            appState.targetRole = role.trimmingCharacters(in: .whitespaces)
+            appState.targetRole = role
         case .experience:
-            appState.experienceLevel = experience == Interview.customExperience
-                ? customExperience.trimmingCharacters(in: .whitespaces)
-                : experience
+            guard let stage else { return }
+            appState.experienceLevel = Experience.level(stage: stage, studyYear: studyYear, workYears: workYears)
         case .interview:
             guard hasInterview == true else { return }
             let name = company.trimmingCharacters(in: .whitespaces)
-            appState.saveUpcomingInterview(Interview(
+            // Going back and on again updates the same interview rather
+            // than adding a second.
+            var interview = Interview(
                 role: appState.targetRole,
                 company: name.isEmpty ? nil : name,
                 experienceLevel: appState.experienceLevel,
                 type: interviewType,
                 date: interviewDate
-            ))
+            )
+            if let savedInterviewID { interview.id = savedInterviewID }
+            savedInterviewID = interview.id
+            appState.saveUpcomingInterview(interview)
         default:
             break
         }
     }
 
+    @State private var savedInterviewID: Interview.ID?
+
+    private static let readableExtensions: Set<String> = ["pdf", "docx", "doc", "rtf", "txt", "heic", "jpg", "jpeg", "png"]
+
+    /// Back to no resume: the kept copy of a picked file, or the builder's
+    /// notes for a built one, go with it.
+    private func deleteResume() {
+        if let name = uploadedFileName, let file = ResumeReader.keptFile(named: name) {
+            try? FileManager.default.removeItem(at: file)
+        }
+        if resumeIsBuilt { appState.resumeDraft = nil }
+        withAnimation(.smooth(duration: 0.3)) {
+            appState.removeResume()
+            uploadedFileName = nil
+            readError = nil
+        }
+    }
+
     private func readResume(_ fileName: String) {
-        isReadingResume = true
-        couldNotRead = false
+        readError = nil
+        guard Self.readableExtensions.contains((fileName as NSString).pathExtension.lowercased()) else {
+            readError = "“\(fileName)” isn’t a file we can read. Choose a PDF or Word document."
+            return
+        }
+        readingFileName = fileName
         Task {
             let result = await AppState.readResume(named: fileName)
             withAnimation {
-                if result.context != nil { appState.resume = result } else { couldNotRead = true }
+                switch result {
+                case .ready:
+                    uploadedFileName = fileName
+                    appState.resume = result
+                case .failed(_, let reason):
+                    readError = reason
+                default:
+                    break
+                }
+                readingFileName = nil
             }
-            isReadingResume = false
         }
     }
 }
 
-/// A big choice, as Setup Assistant offers them: a symbol and a name on a
-/// card, outlined in the accent with a check when chosen.
-private struct ChoiceTile: View {
-    let symbol: String
+// MARK: - Pieces
+
+/// Gives a large tappable area the feel of a button: it sinks a little and
+/// dims while pressed.
+private struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(.spring(duration: 0.25, bounce: 0.2), value: configuration.isPressed)
+    }
+}
+
+/// A question answered with a slider: the answer large above it, updating
+/// as it moves, and the two ends labelled.
+private struct ExperienceSlider: View {
+    let question: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let minimumLabel: String
+    let maximumLabel: String
+    let valueText: (Int) -> String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+            Text(question)
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(valueText(value))
+                .font(.system(.title, design: .rounded, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(AppTheme.brand)
+                .contentTransition(.numericText(value: Double(value)))
+                .animation(.snappy(duration: 0.2), value: value)
+                .accessibilityHidden(true)
+            Slider(
+                value: Binding(
+                    get: { Double(value) },
+                    set: { value = Int($0.rounded()) }
+                ),
+                in: Double(range.lowerBound)...Double(range.upperBound),
+                step: 1
+            ) {
+                Text(question)
+            } minimumValueLabel: {
+                Text(minimumLabel)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            } maximumValueLabel: {
+                Text(maximumLabel)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .tint(AppTheme.brand)
+            .accessibilityValue(valueText(value))
+        }
+        .padding(AppTheme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardBackground()
+        .sensoryFeedback(.selection, trigger: value)
+    }
+}
+
+/// The resume step's tappable area before there's a resume: waiting for a
+/// file, reading one, or why the last one couldn't be read.
+private struct ResumeUploadArea: View {
+    let readingFileName: String?
+    let error: String?
+
+    var body: some View {
+        VStack(spacing: AppTheme.Spacing.sm) {
+            if let readingFileName {
+                ProgressView()
+                    .controlSize(.large)
+                Text("Reading \(readingFileName)…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Image(systemName: "doc.badge.plus")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(AppTheme.brand)
+                    .frame(width: 60, height: 60)
+                    .background(AppTheme.graphic.opacity(0.12), in: Circle())
+                VStack(spacing: 2) {
+                    Text(error == nil ? "Choose a File" : "Choose Another File")
+                        .font(.headline)
+                        .foregroundStyle(AppTheme.brand)
+                    Text("PDF or Word document, from Files")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(AppTheme.record)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, AppTheme.Spacing.xxs)
+                }
+            }
+        }
+        .padding(AppTheme.Spacing.md)
+        .frame(maxWidth: .infinity, minHeight: 176)
+        .background(AppTheme.cardFill, in: RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [7, 6]))
+                .foregroundStyle(error == nil ? AppTheme.graphic.opacity(0.5) : AppTheme.record.opacity(0.6))
+        }
+        .contentShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A row that acts on the resume, in the accent, as Files lists actions.
+private struct ActionRow: View {
     let title: String
-    let isSelected: Bool
+    let symbol: String
+    /// Red and without a chevron, for an action that removes something.
+    var isDestructive = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: AppTheme.Spacing.sm) {
+                Image(systemName: symbol)
+                    .font(.body.weight(.medium))
+                    .frame(width: 24)
+                Text(title)
+                    .font(.body.weight(.medium))
+                Spacer(minLength: 0)
+                if !isDestructive {
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(.tertiaryLabel))
+                }
+            }
+            .foregroundStyle(isDestructive ? AppTheme.record : AppTheme.brand)
+            .padding(.horizontal, AppTheme.Spacing.md)
+            .frame(minHeight: 50)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+    }
+}
+
+/// Build One for Me: one row that opens the builder, which explains its
+/// steps at the top.
+private struct BuildResumeCard: View {
+    let isBuilt: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(AppTheme.brand)
+                        .frame(width: 40, height: 40)
+                        .background(AppTheme.graphic.opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(isBuilt ? "Edit in the Builder" : "Build One for Me")
+                            .font(.headline)
+                            .foregroundStyle(Color.primary)
+                        Text("Written from your notes")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(.tertiaryLabel))
+                }
+            }
+            .multilineTextAlignment(.leading)
+            .padding(AppTheme.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .choiceBackground(isSelected: false)
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// The finish: a green check drawn into a circle. It's paired with "You're
+/// all set" and has its own label, so it never relies on color alone.
+private struct CompletionCheck: View {
+    @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(AppTheme.success.opacity(0.14))
+                .frame(width: 104, height: 104)
+            Circle()
+                .fill(AppTheme.practiced)
+                .frame(width: 76, height: 76)
+            Image(systemName: "checkmark")
+                .font(.system(size: 36, weight: .bold))
+                .foregroundStyle(.white)
+                .symbolEffect(.drawOn, isActive: !shown)
+        }
+        .scaleEffect(shown ? 1 : 0.7)
+        .opacity(shown ? 1 : 0)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Setup complete")
+        .sensoryFeedback(.success, trigger: shown)
+        .task {
+            guard !shown else { return }
+            if reduceMotion {
+                shown = true
+                return
+            }
+            try? await Task.sleep(for: .seconds(0.15))
+            withAnimation(.spring(duration: 0.5, bounce: 0.35)) { shown = true }
+        }
+    }
+}
+
+/// A big choice, as Setup Assistant offers them: a symbol and a name on a
+/// card. Unchosen it's a plain card with a hairline edge; chosen it takes
+/// the accent's outline, a tint and a check; disabled it fades back.
+private struct ChoiceTile: View {
+    let symbol: String
+    let title: String
+    let isSelected: Bool
+    /// One line, symbol beside the name, for a quick yes or no.
+    var compact = false
+    let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            if compact { compactLabel } else { label }
+        }
+        .buttonStyle(PressableStyle())
+        .sensoryFeedback(.selection, trigger: isSelected) { _, new in new }
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// A radio check then the name, as Settings lists one-of-two choices.
+    private var compactLabel: some View {
+        HStack(spacing: AppTheme.Spacing.sm) {
+            SelectionMark(isSelected: isSelected)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, AppTheme.Spacing.md)
+        .frame(maxWidth: .infinity, minHeight: 58)
+        .choiceBackground(isSelected: isSelected)
+        .opacity(isEnabled ? 1 : 0.45)
+        .animation(.spring(duration: 0.3, bounce: 0.2), value: isSelected)
+    }
+
+    private var label: some View {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
                 Image(systemName: symbol)
                     .font(.title2)
-                    .foregroundStyle(isSelected ? AppTheme.brand : Color.secondary)
+                    .foregroundStyle(isSelected ? AppTheme.brand : Color.primary.opacity(0.7))
                     .frame(height: 30)
                 Text(title)
                     .font(.headline)
@@ -841,70 +1002,125 @@ private struct ChoiceTile: View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
             .padding(AppTheme.Spacing.md)
-            .cardBackground()
-            .overlay {
-                RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous)
-                    .strokeBorder(isSelected ? AppTheme.graphic : .clear, lineWidth: 2)
-            }
+            .choiceBackground(isSelected: isSelected)
             .overlay(alignment: .topTrailing) {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.white, AppTheme.graphic)
+                        .foregroundStyle(.white, AppTheme.brand)
                         .padding(12)
                         .transition(.scale.combined(with: .opacity))
                 }
             }
-            .scaleEffect(isSelected ? 1 : 0.98)
+            .opacity(isEnabled ? 1 : 0.45)
             .animation(.spring(duration: 0.3, bounce: 0.3), value: isSelected)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
-/// A wide choice: a symbol, a name and a line on what it means.
+/// An interview type as a row: a radio check, its name, and a short line
+/// on who it's for.
+private struct TypeOptionRow: View {
+    let type: InterviewType
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isShowingInfo = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    SelectionMark(isSelected: isSelected)
+                        .frame(width: 28)
+                    Text(type.interviewName)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, AppTheme.Spacing.md)
+                .frame(minHeight: 52)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+            .sensoryFeedback(.selection, trigger: isSelected) { _, new in new }
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+
+            // Who it's for, on demand, rather than a line under each.
+            Button {
+                isShowingInfo = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.title3)
+                    .foregroundStyle(AppTheme.brand)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, AppTheme.Spacing.xs)
+            .accessibilityLabel("About \(type.interviewName)")
+            .popover(isPresented: $isShowingInfo) {
+                Text(type.summary)
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 260, alignment: .leading)
+                    .padding()
+                    .presentationCompactAdaptation(.popover)
+            }
+        }
+        .background(isSelected ? AppTheme.graphic.opacity(0.06) : .clear)
+        .animation(.smooth(duration: 0.2), value: isSelected)
+    }
+}
+
+/// A wide choice: a symbol and a name.
 private struct ChoiceCard: View {
     let symbol: String
     let title: String
-    let detail: String
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: AppTheme.Spacing.md) {
                 Image(systemName: symbol)
                     .font(.title3)
-                    .foregroundStyle(isSelected ? AppTheme.brand : Color.secondary)
+                    .foregroundStyle(isSelected ? AppTheme.brand : Color.primary.opacity(0.7))
                     .frame(width: 30)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(Color.primary)
-                    Text(detail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isSelected ? AppTheme.graphic : Color(.tertiaryLabel))
-                    .contentTransition(.symbolEffect(.replace))
+                SelectionMark(isSelected: isSelected)
             }
+            .multilineTextAlignment(.leading)
             .padding(AppTheme.Spacing.md)
             .frame(minHeight: 72)
-            .cardBackground()
-            .overlay {
-                RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous)
-                    .strokeBorder(isSelected ? AppTheme.graphic : .clear, lineWidth: 2)
-            }
+            .choiceBackground(isSelected: isSelected)
+            .opacity(isEnabled ? 1 : 0.45)
             .animation(.spring(duration: 0.3, bounce: 0.2), value: isSelected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
+        .sensoryFeedback(.selection, trigger: isSelected) { _, new in new }
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+private extension View {
+    /// A choice's card: a hairline edge so it reads as tappable, and once
+    /// chosen the accent's outline over a faint tint of it.
+    func choiceBackground(isSelected: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous)
+        return background {
+            shape.fill(AppTheme.cardFill)
+            if isSelected { shape.fill(AppTheme.graphic.opacity(0.08)) }
+        }
+        .overlay {
+            shape.strokeBorder(isSelected ? AppTheme.graphic : Color(.separator).opacity(0.6), lineWidth: isSelected ? 2 : 0.5)
+        }
+        .contentShape(shape)
     }
 }
 
@@ -917,7 +1133,7 @@ private struct ReminderPreview: View {
     var body: some View {
         VStack(spacing: AppTheme.Spacing.md) {
             VStack(spacing: 0) {
-                Text("Monday 12 October")
+                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.85))
                 Text("9:41")
@@ -948,11 +1164,6 @@ private struct ReminderPreview: View {
         }
         .accessibilityElement(children: .combine)
     }
-}
-
-#Preview("Welcome") {
-    WelcomeView()
-        .environment(AppState())
 }
 
 #Preview("Profile Setup") {

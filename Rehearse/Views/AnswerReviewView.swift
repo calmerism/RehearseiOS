@@ -2,8 +2,8 @@ import SwiftUI
 
 /// One answer, reviewed: the question and its score out of 100, the five
 /// areas that score is the average of, the answer itself with the part that went
-/// wrong marked, how a stronger answer would open, and a short chat with
-/// Rehearse about it. Opened from a question in Your Score.
+/// wrong marked, how a stronger answer would open, and a way into a chat
+/// with Rehearse about it. Opened from a question in Your Score.
 struct AnswerReviewView: View {
     let number: Int
     let entry: TranscriptEntry
@@ -14,6 +14,9 @@ struct AnswerReviewView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var openArea: AreaScore?
+    /// Kept here, so going back to the answer and into the chat again
+    /// keeps the conversation.
+    @State private var chatMessages: [ChatMessage] = []
 
     private var score: Int? { areas.isEmpty ? nil : Scoring.overall(areas) }
 
@@ -31,7 +34,7 @@ struct AnswerReviewView: View {
                 if entry.weakSkill != nil {
                     betterCard
                 }
-                AnswerChat(entry: entry, skill: skill)
+                chatLink
             }
             .padding(.horizontal, AppTheme.Spacing.md)
             .padding(.vertical, AppTheme.Spacing.sm)
@@ -48,6 +51,38 @@ struct AnswerReviewView: View {
                 Button("Done") { dismiss() }
             }
         }
+    }
+
+    // MARK: - Chat
+
+    /// Opens the chat on its own screen, pushed like any other page.
+    private var chatLink: some View {
+        NavigationLink {
+            AnswerChatView(entry: entry, skill: skill, messages: $chatMessages)
+        } label: {
+            HStack(spacing: AppTheme.Spacing.sm) {
+                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    .font(.title3)
+                    .foregroundStyle(AppTheme.brand)
+                    .frame(width: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ask Rehearse")
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
+                    Text(chatMessages.isEmpty ? "Questions about this answer" : "\(chatMessages.filter(\.fromUser).count) asked so far")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(AppTheme.Spacing.md)
+            .cardBackground()
+        }
+        .buttonStyle(CardButtonStyle())
+        .accessibilityHint("Opens a chat about this answer")
     }
 
     // MARK: - Header
@@ -105,7 +140,7 @@ struct AnswerReviewView: View {
                 NavigationStack {
                     AreaDetailView(area: area)
                 }
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
                 .presentationBackground(AppTheme.background)
             }
         }
@@ -122,15 +157,13 @@ struct AnswerReviewView: View {
 
     // MARK: - The answer
 
-    /// The answer as it was given: the recording, to see how it looked, then
-    /// what was heard. Lines said in Hindi are marked, with their English in
+    /// The answer as it was heard. No recording is kept, only the text. Lines said in Hindi are marked, with their English in
     /// the card below; otherwise the part that went wrong is marked.
     private var answerCard: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
             Text("Your Answer")
                 .font(.label)
                 .foregroundStyle(.secondary)
-            AnswerVideo(seconds: answerSeconds)
             Text(entry.hindiLines.isEmpty ? markedAnswer : saidAnswer)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -176,11 +209,6 @@ struct AnswerReviewView: View {
         .cardBackground()
     }
 
-    /// About how long it took to say, at a natural pace.
-    private var answerSeconds: Int {
-        max(entry.answer.split(separator: " ").count * 60 / 140, 8) + 20
-    }
-
     /// The answer, with its opening sentence marked when the answer fell
     /// short: that's where the point should have been.
     private var markedAnswer: AttributedString {
@@ -211,22 +239,23 @@ struct AnswerReviewView: View {
     }
 }
 
-// MARK: - Chat
+// MARK: - Chat screen
 
-/// A short chat with Rehearse about one answer. Suggested questions are
-/// plain rows, as Siri suggests; a typed question gets a general reply.
-/// Every reply is predefined in this prototype.
-private struct AnswerChat: View {
+struct ChatMessage: Identifiable, Hashable {
+    let id = UUID()
+    let fromUser: Bool
+    let text: String
+}
+
+/// A chat with Rehearse about one answer, on its own screen: the
+/// conversation scrolls, suggested questions sit under it, and the field to
+/// type in is pinned above the keyboard, as Messages does. Every reply is
+/// predefined in this prototype.
+struct AnswerChatView: View {
     let entry: TranscriptEntry
     let skill: Skill
+    @Binding var messages: [ChatMessage]
 
-    private struct Message: Identifiable, Hashable {
-        let id = UUID()
-        let fromUser: Bool
-        let text: String
-    }
-
-    @State private var messages: [Message] = []
     @State private var draft = ""
     @State private var isTyping = false
     @FocusState private var isFocused: Bool
@@ -240,88 +269,83 @@ private struct AnswerChat: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-            HStack(spacing: AppTheme.Spacing.xs) {
-                AppLogo(size: 20)
-                Text("Ask Rehearse")
-                    .font(.label)
-                    .foregroundStyle(.secondary)
-            }
-
-            if messages.isEmpty {
-                bubble(Message(fromUser: false, text: "Ask me anything about this answer."))
-            }
-            ForEach(messages) { message in
-                bubble(message)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            if isTyping {
-                bubble(Message(fromUser: false, text: "…"))
-                    .transition(.opacity)
-            }
-
-            if !suggestions.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(Array(suggestions.enumerated()), id: \.element) { index, suggestion in
-                        if index > 0 { Divider().padding(.leading, AppTheme.Spacing.md) }
-                        Button {
-                            send(suggestion)
-                        } label: {
-                            HStack {
-                                Text(suggestion)
-                                    .foregroundStyle(AppTheme.brand)
-                                Spacer()
-                                Image(systemName: "arrow.up.circle.fill")
-                                    .foregroundStyle(AppTheme.brand)
-                            }
-                            .font(.subheadline)
-                            .padding(.horizontal, AppTheme.Spacing.md)
-                            .padding(.vertical, AppTheme.Spacing.sm)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(CardRowButtonStyle())
-                        .disabled(isTyping)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                    // What the chat is about, so it reads on its own.
+                    Text(entry.question)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, AppTheme.Spacing.xs)
+                    bubble(ChatMessage(fromUser: false, text: "Ask me anything about this answer."))
+                    ForEach(messages) { message in
+                        bubble(message)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
+                    if isTyping {
+                        bubble(ChatMessage(fromUser: false, text: "…"))
+                            .transition(.opacity)
+                    }
+                    if !suggestions.isEmpty {
+                        VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                            ForEach(suggestions, id: \.self) { suggestion in
+                                Button(suggestion) { send(suggestion) }
+                                    .font(.subheadline.weight(.medium))
+                                    .buttonStyle(.bordered)
+                                    .buttonBorderShape(.capsule)
+                                    .tint(AppTheme.brand)
+                                    .disabled(isTyping)
+                            }
+                        }
+                        .padding(.top, AppTheme.Spacing.xs)
+                    }
+                    Color.clear.frame(height: 1).id("end")
                 }
-                .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous))
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.control, style: .continuous))
+                .padding(AppTheme.Spacing.md)
             }
-
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: messages) {
+                withAnimation { proxy.scrollTo("end", anchor: .bottom) }
+            }
+        }
+        .groupedBackground()
+        .navigationTitle("Ask Rehearse")
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaBar(edge: .bottom) {
             HStack(spacing: AppTheme.Spacing.xs) {
-                TextField("Ask about this answer", text: $draft)
+                TextField("Ask about this answer", text: $draft, prompt: .prompt("Ask about this answer"))
                     .focused($isFocused)
                     .submitLabel(.send)
                     .onSubmit { send(draft) }
                     .padding(.horizontal, AppTheme.Spacing.md)
                     .frame(minHeight: 44)
-                    .background(AppTheme.fill, in: Capsule())
+                    .glassEffect(.regular, in: Capsule())
                 Button {
                     send(draft)
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.title)
+                        .font(.system(size: 34))
                         .foregroundStyle(draft.trimmingCharacters(in: .whitespaces).isEmpty ? Color(.tertiaryLabel) : AppTheme.brand)
                 }
                 .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || isTyping)
                 .accessibilityLabel("Send")
             }
+            .padding(.horizontal, AppTheme.Spacing.md)
+            .padding(.vertical, AppTheme.Spacing.xs)
         }
-        .padding(AppTheme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardBackground()
         .animation(.smooth(duration: 0.3), value: messages)
+        .animation(.smooth(duration: 0.2), value: isTyping)
         #if DEBUG
         .task {
             // `-chat` asks the first suggestion, for screenshots.
-            guard ProcessInfo.processInfo.arguments.contains("-chat") else { return }
+            guard ProcessInfo.processInfo.arguments.contains("-chat"), messages.isEmpty else { return }
             try? await Task.sleep(for: .seconds(1))
             if let first = suggestions.first { send(first) }
         }
         #endif
-        .animation(.smooth(duration: 0.2), value: isTyping)
     }
 
-    private func bubble(_ message: Message) -> some View {
+    private func bubble(_ message: ChatMessage) -> some View {
         HStack(alignment: .bottom, spacing: AppTheme.Spacing.xs) {
             if message.fromUser { Spacer(minLength: 48) }
             if !message.fromUser {
@@ -329,11 +353,11 @@ private struct AnswerChat: View {
                 AppLogo(size: 28)
             }
             Text(message.text)
-                .font(.subheadline)
+                .font(.body)
                 .foregroundStyle(message.fromUser ? Color.white : Color.primary)
                 .padding(.horizontal, AppTheme.Spacing.sm)
                 .padding(.vertical, AppTheme.Spacing.xs)
-                .background(message.fromUser ? AppTheme.buttonFill : AppTheme.fill,
+                .background(message.fromUser ? AppTheme.buttonFill : AppTheme.cardFill,
                             in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .fixedSize(horizontal: false, vertical: true)
             if !message.fromUser { Spacer(minLength: 48) }
@@ -344,13 +368,13 @@ private struct AnswerChat: View {
     private func send(_ text: String) {
         let question = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty, !isTyping else { return }
-        messages.append(Message(fromUser: true, text: question))
+        messages.append(ChatMessage(fromUser: true, text: question))
         draft = ""
         isTyping = true
         Task {
             try? await Task.sleep(for: .seconds(0.9))
             isTyping = false
-            messages.append(Message(fromUser: false, text: reply(to: question)))
+            messages.append(ChatMessage(fromUser: false, text: reply(to: question)))
         }
     }
 

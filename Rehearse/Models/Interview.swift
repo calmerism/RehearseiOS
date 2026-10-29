@@ -9,11 +9,19 @@ enum InterviewType: String, CaseIterable, Identifiable, Hashable, nonisolated Co
     /// The interview's name, capitalized as a title: "Technical Interview".
     var interviewName: String { "\(rawValue) Interview" }
 
-    /// Shown during setup so the choice is an informed one rather than a label.
+    /// Shown wherever the type is chosen, so the choice is an informed one
+    /// rather than a label.
     var summary: String {
         switch self {
-        case .technical: "Your projects, technical decisions and debugging."
-        case .nonTechnical: "Teamwork, ownership and how you handle setbacks."
+        case .technical: "Coding, system design and problem-solving questions, for engineering roles."
+        case .nonTechnical: "Behavioral questions on teamwork, leadership and your past work."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .technical: "chevron.left.forwardslash.chevron.right"
+        case .nonTechnical: "person.2"
         }
     }
 }

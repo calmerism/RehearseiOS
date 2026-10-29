@@ -28,10 +28,6 @@ struct HistoryView: View {
             if !appState.rehearsals.isEmpty {
                 Section {
                     summary
-                    // The trend itself is on Progress.
-                    if appState.overallTrend.count > 1 {
-                        NavigationLink("Progress", value: Route.progress)
-                    }
                 }
                 Section {
                     Picker("Show", selection: $filter) {

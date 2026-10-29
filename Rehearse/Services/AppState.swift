@@ -2,19 +2,18 @@ import Foundation
 import SwiftUI
 import Observation
 
-/// The dock's tabs: Home, Questions, Practice and Profile. The mock
-/// interview sits between them as a button, not a tab.
-/// The dock's two tabs. Practice is reached from Home and Your Score, and
-/// Profile from Home's header.
+/// The dock's four tabs. A mock interview starts from Home; Practice is
+/// reached from Home and Your Score, and Profile from Home's header.
 enum AppTab: Hashable, CaseIterable {
     case home
     case questions
+    case resume
+    case progress
 }
 
 /// Every destination below a tab's root. Each tab keeps its own stack, so
 /// "back" always means "where I came from".
 enum Route: Hashable {
-    case resume
     case resumeVersion(ResumeVersion.ID)
     /// The library, pre-filtered to questions that build a skill.
     case library(focus: Skill?)
@@ -79,10 +78,6 @@ final class AppState {
     var isRetryingSaves = false
     /// The name the candidate signed up with; the prototype's own until then.
     var candidateName = MockData.candidateName
-    /// First launch shows the welcome before the login.
-    var hasSeenWelcome = false
-    /// Set by Get Started, so the login opens on Sign Up.
-    var opensSignUp = false
     /// A new account sets up its profile before Home.
     var needsProfileSetup = false
     /// What the candidate is preparing for, from profile setup.
@@ -98,6 +93,8 @@ final class AppState {
     var debugOpensFirstAnswer = false
     #endif
     var questionsPath: [Route] = []
+    var resumePath: [Route] = []
+    var progressPath: [Route] = []
     /// The candidate's real interviews, soonest first.
     private(set) var upcomingInterviews: [Interview] = []
     /// Real interviews already done, most recent first. Upcoming ones join
@@ -116,6 +113,10 @@ final class AppState {
     }
     /// The resume on the candidate's Profile.
     var resume: ResumeStatus = .none
+    /// The resume builder's notes, kept so it reopens where it was left.
+    var resumeDraft: ResumeDraft?
+    /// Set to open the builder straight on its editable page.
+    var builderOpensOnPage = false
     /// The Profile resume rewritten for particular jobs, newest first.
     private(set) var tailoredResumes: [ResumeVersion] = []
     /// Resumes the Profile had before, newest first.
@@ -169,7 +170,10 @@ final class AppState {
         selectedTab = .home
         path = []
         questionsPath = []
+        resumePath = []
+        progressPath = []
         resume = .none
+        resumeDraft = nil
         tailoredResumes = []
         pastResumes = []
         switch scenario {
@@ -661,7 +665,9 @@ final class AppState {
     /// A resume written by the builder becomes the Profile one. Tailored
     /// versions were made from the old one, so they go.
     func useBuiltResume(_ context: ResumeContext) {
-        archive(resume.context)
+        // A rewrite of the same built resume replaces it rather than
+        // filling the library with drafts.
+        if resume.context?.fileName != context.fileName { archive(resume.context) }
         resume = .ready(context)
         tailoredResumes = []
     }

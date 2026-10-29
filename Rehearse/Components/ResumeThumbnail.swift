@@ -97,6 +97,10 @@ struct ResumePage: View {
     /// Shelves use the standard size; a preview draws it larger, a row's
     /// icon smaller.
     var width: CGFloat = ResumePage.width
+    /// Grows past the page's foot to fit everything, rather than cutting the
+    /// last lines off: for a preview someone is checking line by line.
+    var showsAll = false
+    @State private var contentHeight: CGFloat = 0
 
     static let width: CGFloat = 108
     static var height: CGFloat { width * 11 / 8.5 }
@@ -107,10 +111,13 @@ struct ResumePage: View {
     var body: some View {
         let scale = width / Self.layoutWidth
         let radius = Self.cornerRadius * min(max(width / Self.width, 0.6), 1.6)
+        let pageHeight = Self.layoutWidth * 11 / 8.5
+        let layoutHeight = showsAll ? max(pageHeight, contentHeight) : pageHeight
         page
-            .frame(width: Self.layoutWidth, height: Self.layoutWidth * 11 / 8.5, alignment: .topLeading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+            .frame(width: Self.layoutWidth, height: layoutHeight, alignment: .topLeading)
             .scaleEffect(scale, anchor: .topLeading)
-            .frame(width: width, height: width * 11 / 8.5, alignment: .topLeading)
+            .frame(width: width, height: layoutHeight * scale, alignment: .topLeading)
             .background(.white)
             .clipShape(.rect(cornerRadius: radius, style: .continuous))
             .overlay {
@@ -125,7 +132,7 @@ struct ResumePage: View {
     private var page: some View {
         VStack(alignment: .leading, spacing: 9) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(MockData.candidateName)
+                Text(context.name ?? MockData.candidateName)
                     .font(.system(size: 17, weight: .bold))
                 Text(context.skills.prefix(4).joined(separator: ", "))
                     .font(.system(size: 8))
@@ -156,7 +163,7 @@ struct ResumePage: View {
                         .foregroundStyle(.secondary)
                     Text(highlight.detail)
                         .font(.system(size: 8))
-                        .lineLimit(3)
+                        .lineLimit(showsAll ? nil : 3)
                 }
             }
         }
@@ -166,6 +173,57 @@ struct ResumePage: View {
         // At its own height, so a long resume runs off the page's foot
         // rather than squeezing its lines.
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A resume as a full page, the width of the screen, as Files shows a PDF.
+/// A resume written from notes has no file to open, so its page is drawn.
+struct ResumePreviewSheet: View {
+    let context: ResumeContext
+    /// What's being previewed, as the bar's title.
+    var title = "Preview"
+    /// The reminder under a page written from notes; nil for one that isn't.
+    var note: String? = "Written from your notes. Check each line is true."
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: AppTheme.Spacing.md) {
+                        ResumePage(context: context, width: min(proxy.size.width - 2 * AppTheme.Spacing.md, AppTheme.maxPageWidth), showsAll: true)
+                        if let note {
+                            Text(note)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(AppTheme.Spacing.md)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .groupedBackground()
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// A whole page as wide as the space it's given, every line showing: for
+/// reading a resume where it sits, with no sheet to open.
+struct FittedResumePage: View {
+    let context: ResumeContext
+    @State private var width: CGFloat = 0
+
+    var body: some View {
+        ResumePage(context: context, width: max(width, 1), showsAll: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
 

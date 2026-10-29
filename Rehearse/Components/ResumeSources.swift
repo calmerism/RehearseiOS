@@ -41,10 +41,11 @@ enum ResumeSource: CaseIterable, Identifiable {
 
 /// The three ways, as rows with what each one means beneath.
 struct ResumeSourceRows: View {
+    var sources: [ResumeSource] = ResumeSource.allCases
     let choose: (ResumeSource) -> Void
 
     var body: some View {
-        ForEach(ResumeSource.allCases) { source in
+        ForEach(sources) { source in
             Button {
                 choose(source)
             } label: {
@@ -111,5 +112,38 @@ private struct ResumeSourcePresenter: ViewModifier {
             .sheet(isPresented: showing(.build)) {
                 ResumeBuilderView()
             }
+    }
+}
+
+/// What Build One for Me involves, shown before it opens and at the top of
+/// the builder.
+enum ResumeBuilderSteps {
+    static let all = [
+        "Add your details and education",
+        "Describe each project in your own words, in any language",
+        "Preview the one-page resume before you use it",
+    ]
+}
+
+/// A step in a short how-to: its number in a small circle, then the text.
+struct NumberedStep: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
+            Text("\(number)")
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(AppTheme.brand)
+                .frame(width: 22, height: 22)
+                .background(AppTheme.graphic.opacity(0.12), in: Circle())
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(Color.primary.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
     }
 }

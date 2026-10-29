@@ -9,6 +9,16 @@ extension View {
         background(AppTheme.background)
     }
 
+    /// On a screen wider than a phone (the iPhone Duo open), keeps the page
+    /// at phone width in the middle, with its background either side, so
+    /// rows and cards don't stretch. A phone screen is narrower than the
+    /// limit, so nothing changes there.
+    func phoneWidth() -> some View {
+        frame(maxWidth: AppTheme.maxPageWidth)
+            .frame(maxWidth: .infinity)
+            .background(AppTheme.background.ignoresSafeArea())
+    }
+
     /// Every list and form: large section headings (the same style as
     /// `SectionTitle` on card screens) and the same gap between sections.
     func appListStyle() -> some View {
@@ -430,8 +440,8 @@ struct SectionTitle: View {
     var extraActionTitle: String?
     var extraActionImage: String?
     var extraAction: (() -> Void)?
-    /// Makes the heading itself a link, with a chevron after it, as Music
-    /// and the App Store head a shelf that opens in full.
+    /// Makes the whole heading a link to the full list, with its chevron at
+    /// the right end of the row, in line with the cards' chevrons below.
     var titleDestination: Route?
 
     var body: some View {
@@ -442,13 +452,20 @@ struct SectionTitle: View {
                         Text(title)
                             .font(.sectionTitle)
                             .foregroundStyle(Color.primary)
+                        Spacer(minLength: AppTheme.Spacing.xs)
+                        // Just inside the cards' right edge: the heading
+                        // sits headingMargin - md in from it, so step most
+                        // of the way back out.
                         Image(systemName: "chevron.right")
                             .font(.body.weight(.bold))
                             // A solid gray, not the link's tint faded.
                             .foregroundStyle(Color(.secondaryLabel))
+                            .padding(.trailing, AppTheme.Spacing.md - AppTheme.Spacing.headingMargin + 4)
                     }
+                    .contentShape(Rectangle())
                     .tapTarget()
                 }
+                .buttonStyle(.plain)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityHint("Shows all of them")
             } else {
@@ -456,7 +473,10 @@ struct SectionTitle: View {
                     .font(.sectionTitle)
                     .accessibilityAddTraits(.isHeader)
             }
-            Spacer(minLength: 0)
+            // A linked heading already fills the row to its chevron.
+            if titleDestination == nil {
+                Spacer(minLength: 0)
+            }
             if let extraActionTitle, let extraActionImage, let extraAction {
                 Button(action: extraAction) {
                     Image(systemName: extraActionImage)
@@ -562,6 +582,8 @@ struct ScoreRing: View {
     var size: CGFloat = 84
     /// The change since last time, shown small under the caption.
     var delta: Int? = nil
+    /// Off where the score is written beside the ring: the ring alone.
+    var showsLabel = true
     @State private var progress: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -592,6 +614,7 @@ struct ScoreRing: View {
                     .rotationEffect(.degrees(-90))
             }
             // Number, caption and change as one group, centered in the ring.
+            if showsLabel {
             VStack(spacing: 0) {
                 if let score {
                     Text("\(score)")
@@ -622,6 +645,7 @@ struct ScoreRing: View {
             // Optically centered: the figures have no descenders, so the
             // group reads low unless it's raised a touch.
             .offset(y: delta.map { $0 != 0 } == true ? -size * 0.022 : 0)
+            }
         }
         .frame(width: size, height: size)
         .onAppear {
@@ -802,7 +826,7 @@ struct SearchField: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField(prompt, text: $text)
+            TextField(prompt, text: $text, prompt: .prompt(prompt))
                 .focused($isFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
@@ -818,14 +842,26 @@ struct SearchField: View {
                 .accessibilityLabel("Clear search")
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 40)
-        .background(AppTheme.fill, in: Capsule())
+        .padding(.horizontal, 14)
+        .frame(height: 44)
+        .background(AppTheme.cardFill, in: Capsule())
+        // A hairline, so it reads as part of the page, not a hole in it.
+        .overlay(Capsule().strokeBorder(Color(.separator).opacity(0.5), lineWidth: 0.5))
+        .contentShape(Capsule())
+        .onTapGesture { isFocused = true }
     }
 }
 
 /// A typed-in value with its name beside it, as in Settings, so a filled-in
 /// field still says what it is.
+extension Text {
+    /// A text field's placeholder, in the secondary label gray: the
+    /// system's own placeholder gray is too faint to read comfortably.
+    static func prompt(_ string: String) -> Text {
+        Text(string).foregroundStyle(Color(.secondaryLabel))
+    }
+}
+
 struct LabeledTextField: View {
     let title: String
     @Binding var text: String
@@ -834,7 +870,7 @@ struct LabeledTextField: View {
 
     var body: some View {
         LabeledContent(title) {
-            TextField(title, text: $text, prompt: Text(prompt))
+            TextField(title, text: $text, prompt: .prompt(prompt))
                 .multilineTextAlignment(.trailing)
                 .textContentType(contentType)
                 .textInputAutocapitalization(.words)
@@ -966,6 +1002,45 @@ struct DateTile: View {
     }
 }
 
+/// How soon an interview is, in the date tile's shape: "3 / DAYS",
+/// "1 / DAY", or "TODAY", so the most urgent fact is the biggest thing.
+struct CountdownTile: View {
+    let date: Date?
+
+    private var days: Int? {
+        guard let date else { return nil }
+        let calendar = Calendar.current
+        return calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: date)).day
+    }
+
+    /// Within three days the tile warms to the accent, so how soon shows
+    /// before the number is read.
+    private var isSoon: Bool { days.map { $0 >= 0 && $0 <= 3 } ?? false }
+
+    var body: some View {
+        VStack(spacing: 1) {
+            if let days, days > 0 {
+                Text("\(days)")
+                    .font(.title2.weight(.bold).monospacedDigit().leading(.tight))
+                    .foregroundStyle(isSoon ? AppTheme.brand : Color.primary)
+                Text(days == 1 ? "Day" : "Days")
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(isSoon ? AppTheme.brand : Color.secondary)
+            } else {
+                Text(days == 0 ? "Today" : "TBC")
+                    .font(.footnote.weight(.bold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(days == 0 ? AppTheme.brand : Color.secondary)
+            }
+        }
+        .frame(width: 60, height: 60)
+        .background(isSoon ? AppTheme.graphic.opacity(0.14) : AppTheme.fill, in: RoundedRectangle(cornerRadius: AppTheme.Radius.control + 2, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(days.map { $0 == 0 ? "Today" : $0 == 1 ? "In 1 day" : "In \($0) days" } ?? "No date")
+    }
+}
+
 /// A part score with its bar, out of 100.
 struct ScoreBar: View {
     let title: String
@@ -1018,25 +1093,38 @@ struct QuestionRow: View {
     var lineLimit = 3
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
-            // Explicit colors: inside a list Button, hierarchical styles take the tint.
-            Text(question.text)
-                .font(font)
-                .foregroundStyle(Color.primary)
-                .lineLimit(lineLimit)
-                .truncationMode(.tail)
-            HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.xs) {
-                Text(endsWithPeriod ? question.metaText + "." : question.metaText)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
-                if isPracticed {
-                    if practicedOnTrailing { Spacer(minLength: AppTheme.Spacing.xs) }
-                    PracticedLabel()
+        // Trailing, the tick is its own column, centered on the row beside
+        // the chevron; otherwise it follows the gray line.
+        HStack(alignment: .center, spacing: AppTheme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
+                // Explicit colors: inside a list Button, hierarchical styles take the tint.
+                Text(question.text)
+                    .font(font)
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(lineLimit)
+                    .truncationMode(.tail)
+                HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.xs) {
+                    Text(endsWithPeriod ? question.metaText + "." : question.metaText)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                    if isPracticed && !practicedOnTrailing {
+                        practicedTick
+                    }
                 }
+            }
+            if isPracticed && practicedOnTrailing {
+                Spacer(minLength: 0)
+                practicedTick
             }
         }
         .padding(.vertical, AppTheme.Spacing.xxs)
+    }
+
+    /// A tick alone, as a finished step shows; read aloud as "Practiced".
+    private var practicedTick: some View {
+        DoneMark()
+            .accessibilityLabel("Practiced")
     }
 }
 
@@ -1100,5 +1188,74 @@ struct PracticedLabel: View {
             .font(.subheadline.weight(.bold))
             .foregroundStyle(AppTheme.practiced)
             .lineLimit(1)
+    }
+}
+
+// MARK: - Marks
+
+/// The app's one mark for a choice: a filled orange tick in a circle when
+/// chosen, an empty circle when not. Orange means "yours".
+struct SelectionMark: View {
+    let isSelected: Bool
+
+    var body: some View {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(.title3)
+            .foregroundStyle(isSelected ? AppTheme.brand : Color(.tertiaryLabel))
+            .contentTransition(.symbolEffect(.replace))
+            .accessibilityHidden(true)
+    }
+}
+
+/// The app's one mark for something done or practiced: the same tick in a
+/// circle, filled green. Green means "done".
+struct DoneMark: View {
+    var body: some View {
+        Image(systemName: "checkmark.circle.fill")
+            .font(.title3)
+            .foregroundStyle(AppTheme.practiced)
+    }
+}
+
+// MARK: - Interview type
+
+/// An interview type as a list row: its name, an ⓘ that says who it's for,
+/// and a check when chosen.
+struct InterviewTypeRow: View {
+    let type: InterviewType
+    let isSelected: Bool
+    let select: () -> Void
+    @State private var isShowingInfo = false
+
+    var body: some View {
+        HStack(spacing: AppTheme.Spacing.sm) {
+            Button(action: select) {
+                HStack {
+                    Text(type.interviewName)
+                        .foregroundStyle(Color.primary)
+                    Spacer(minLength: AppTheme.Spacing.xs)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            SelectionMark(isSelected: isSelected)
+            Button {
+                isShowingInfo = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(AppTheme.brand)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("About \(type.interviewName)")
+            .popover(isPresented: $isShowingInfo) {
+                Text(type.summary)
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 260, alignment: .leading)
+                    .padding()
+                    .presentationCompactAdaptation(.popover)
+            }
+        }
     }
 }

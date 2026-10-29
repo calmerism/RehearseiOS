@@ -1,50 +1,93 @@
 import SwiftUI
 
 /// The report for one interview, shared by the end of the live interview and
-/// History so a result always reads the same way: the score out of 100, how
-/// it's worked out from six areas, what went well, the areas to grow, then
-/// each question, which opens to show what went wrong in it. How Scoring
-/// Works, from the toolbar or the Overall row, says what every number is
-/// based on. Words are kept to a few per line.
-/// Lay it out in a `ReportScroll`.
+/// History so a result always reads the same way. It's split over two pages:
+/// the first is the result (the score, what it means, where it sits on the
+/// scale), how it's worked out and what to improve; a row opens the second,
+/// every answer.
+/// How Scoring Works, from the info button or the Overall row, says what
+/// every number is based on. Lay it out in a `ReportScroll`.
 struct FeedbackReport<PracticeAction: View>: View {
     let rehearsal: Rehearsal
+    /// Which page of the report this is.
+    var page: ReportPage = .overview
     /// The button on an area for growth that goes and works on it.
     @ViewBuilder let practiceAction: (Skill) -> PracticeAction
 
     @Environment(AppState.self) private var appState
-    @State private var openQuestion: OpenQuestion?
-    @State private var openArea: AreaScore?
-    /// The area for growth in view, when there are several to swipe through.
-    @State private var growthPage: Skill?
-    @State private var showsScoring = false
+    /// The one sheet open over the report. One presenter for all of them,
+    /// so a tap always opens its sheet straight away.
+    @State private var sheet: ReportSheet?
+
+    private enum ReportSheet: Identifiable {
+        case scoring
+        case area(AreaScore)
+        case answer(OpenQuestion)
+
+        var id: String {
+            switch self {
+            case .scoring: "scoring"
+            case .area(let area): "area-\(area.id)"
+            case .answer(let open): "answer-\(open.id)"
+            }
+        }
+    }
 
     var body: some View {
         if let feedback = rehearsal.feedback {
-            resultCard(feedback)
-            breakdownCard(feedback)
-            strengthsCard(feedback)
-            growthCard(feedback)
-            questionBreakdown(feedback)
-            rehearseAgainButton
-            footer
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button("How Scoring Works", systemImage: "info.circle") { showsScoring = true }
-                    }
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                switch page {
+                case .overview:
+                    resultCard(feedback)
+                    SectionTitle(title: "Score Breakdown")
+                    breakdownCard(feedback)
+                    answersLink(feedback)
+                    SectionTitle(title: "What to Improve")
+                        .padding(.top, AppTheme.Spacing.sm)
+                    growthList(feedback)
+                    rehearseAgainButton
+                case .answers:
+                    questionBreakdown(feedback)
+                    Text("Tap an answer to see what went well, what to fix, and to ask about it.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, AppTheme.Spacing.headingMargin - AppTheme.Spacing.md)
                 }
-                .sheet(isPresented: $showsScoring) {
+            }
+            .sheet(item: $sheet) { sheet in
+                switch sheet {
+                case .scoring:
                     NavigationStack { ScoringInfoView() }
                         .presentationDetents([.large])
+                case .area(let area):
+                    NavigationStack { AreaDetailView(area: area) }
+                        .presentationDetents([.large])
+                        // Solid, so the score behind doesn't show through.
+                        .presentationBackground(AppTheme.background)
+                case .answer(let open):
+                    NavigationStack {
+                        AnswerReviewView(number: open.number, entry: open.entry, focus: open.focus, areas: open.areas)
+                    }
                 }
-                #if DEBUG
-                .task {
-                    // `-scoring` opens How Scoring Works, for screenshots.
-                    guard ProcessInfo.processInfo.arguments.contains("-scoring") else { return }
-                    try? await Task.sleep(for: .seconds(0.6))
-                    showsScoring = true
+            }
+            #if DEBUG
+            .task {
+                // `-scoring` opens How Scoring Works, `-part N` an area's
+                // working, and `-screen answer` the first answer, for
+                // screenshots.
+                let arguments = ProcessInfo.processInfo.arguments
+                try? await Task.sleep(for: .seconds(0.6))
+                if arguments.contains("-scoring") { sheet = .scoring }
+                if let index = arguments.firstIndex(of: "-part"), arguments.indices.contains(index + 1),
+                   let number = Int(arguments[index + 1]), feedback.areas.indices.contains(number) {
+                    sheet = .area(feedback.areas[number])
                 }
-                #endif
+                if appState.debugOpensFirstAnswer, let first = numberedTranscript.first {
+                    appState.debugOpensFirstAnswer = false
+                    sheet = .answer(OpenQuestion(number: first.number, entry: first.entry, focus: feedback.focus, areas: feedback.areas(for: first.entry)))
+                }
+            }
+            #endif
         }
     }
 
@@ -58,7 +101,7 @@ struct FeedbackReport<PracticeAction: View>: View {
     /// The total, large and plainly out of 100, what it means, how it moved
     /// since last time, and where it sits on the scale.
     private func resultCard(_ feedback: Feedback) -> some View {
-        VStack(spacing: AppTheme.Spacing.md) {
+        VStack(spacing: AppTheme.Spacing.lg) {
             ScoreRing(
                 score: feedback.overall,
                 caption: "out of 100",
@@ -66,14 +109,33 @@ struct FeedbackReport<PracticeAction: View>: View {
                 delta: (previous?.feedback?.overall).map { feedback.overall - $0 }
             )
                 .padding(.top, AppTheme.Spacing.xs)
-            VStack(spacing: AppTheme.Spacing.xxs) {
-                Text(feedback.band.title)
-                    .font(.title2.bold())
-                if answerCount > 0 {
-                    Text("Based on \(answerCount) \(answerCount == 1 ? "answer" : "answers")")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            VStack(spacing: 2) {
+                // The band, with what it means one tap away beside it.
+                HStack(spacing: AppTheme.Spacing.xs) {
+                    Text(feedback.band.title)
+                        .font(.title2.bold())
+                    Button {
+                        sheet = .scoring
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .font(.title3)
+                            .foregroundStyle(AppTheme.brand)
+                            .tapTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("How scoring works")
+                    .accessibilityHint("Explains what the score means and how it’s worked out")
                 }
+                // When it took place, under the score it belongs to.
+                Group {
+                    Text(rehearsal.date.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute()))
+                    if answerCount > 0 {
+                        Text("Based on \(answerCount) \(answerCount == 1 ? "answer" : "answers")")
+                    }
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.top, 2)
             }
             ScoreScale(score: feedback.overall)
         }
@@ -83,99 +145,82 @@ struct FeedbackReport<PracticeAction: View>: View {
         .padding(.bottom, AppTheme.Spacing.md)
     }
 
+    // MARK: - The pages
+
+    /// The row that opens the second page, every answer, with a line saying
+    /// how many need work.
+    private func answersLink(_ feedback: Feedback) -> some View {
+        let toImprove = rehearsal.transcript.filter { entry in
+            feedback.score(for: entry).map { $0 < 80 } ?? false
+        }.count
+        return pageLink(.answers, symbol: "text.bubble.fill",
+                        detail: "\(answerCount) \(answerCount == 1 ? "answer" : "answers")" + (toImprove > 0 ? ", \(toImprove) to improve" : ""))
+            .cardBackground()
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
+    }
+
+    private func pageLink(_ target: ReportPage, symbol: String, detail: String) -> some View {
+        NavigationLink {
+            ReportScroll {
+                FeedbackReport(rehearsal: rehearsal, page: target, practiceAction: practiceAction)
+            }
+            .scrollingTitle(target.title, subtitle: rehearsal.title, inList: false)
+            .navigationBarTitleDisplayMode(.inline)
+        } label: {
+            HStack(spacing: AppTheme.Spacing.sm) {
+                Image(systemName: symbol)
+                    .font(.title3)
+                    .foregroundStyle(AppTheme.graphic)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(target.title)
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: AppTheme.Spacing.xs)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, AppTheme.Spacing.md)
+            .padding(.vertical, AppTheme.Spacing.sm)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(CardRowButtonStyle())
+    }
+
+    /// Every area to improve, one card each, down the page.
+    private func growthList(_ feedback: Feedback) -> some View {
+        VStack(spacing: AppTheme.Spacing.sm) {
+            ForEach(growthAreas(feedback), id: \.self) { skill in
+                growthPage(skill, feedback)
+            }
+        }
+    }
+
     // MARK: - How it's worked out
 
-    /// Why the score is what it is: the six areas, each out of 100, and
-    /// their average. Tap an area for the parts it's worked out from, or the
-    /// average for how scoring works.
+    /// Why the score is what it is: the six areas, each out of 100. Tap an
+    /// area for the parts it's worked out from.
+    @ViewBuilder
     private func breakdownCard(_ feedback: Feedback) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(feedback.areas.enumerated()), id: \.element.id) { index, area in
                 if index > 0 { Divider().padding(.leading, 52) }
                 Button {
-                    openArea = area
+                    sheet = .area(area)
                 } label: {
                     AreaRow(area: area)
                 }
                 .buttonStyle(CardRowButtonStyle())
             }
-            Divider()
-            if feedback.deduction > 0 {
-                HStack {
-                    Text("Ended early")
-                    Spacer()
-                    Text("−\(feedback.deduction)")
-                        .monospacedDigit()
-                        .foregroundStyle(AppTheme.record)
-                }
-                .font(.subheadline)
-                .padding(.horizontal, AppTheme.Spacing.md)
-                .padding(.top, AppTheme.Spacing.sm)
-            }
-            Button {
-                showsScoring = true
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Overall")
-                            .font(.headline)
-                            .foregroundStyle(Color.primary)
-                        Text(feedback.deduction > 0 ? "Average of the six, less \(feedback.deduction) for ending early" : "Average of the six")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text("\(Text("\(feedback.overall)").font(.title3.bold()).foregroundStyle(Color.primary)) / 100")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(AppTheme.Spacing.md)
-                .contentShape(Rectangle())
-                .accessibilityElement(children: .combine)
-                .accessibilityHint("Shows how scoring works")
-            }
-            .buttonStyle(CardRowButtonStyle())
         }
         .cardBackground()
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
-        #if DEBUG
-        .task {
-            // `-part N` opens an area's working, for screenshots.
-            let arguments = ProcessInfo.processInfo.arguments
-            guard let index = arguments.firstIndex(of: "-part"), arguments.indices.contains(index + 1),
-                  let number = Int(arguments[index + 1]), feedback.areas.indices.contains(number) else { return }
-            try? await Task.sleep(for: .seconds(0.6))
-            openArea = feedback.areas[number]
-        }
-        #endif
-        .sheet(item: $openArea) { area in
-            NavigationStack {
-                AreaDetailView(area: area)
-            }
-            .presentationDetents([.medium, .large])
-            // Solid, so the score behind doesn't show through the rows.
-            .presentationBackground(AppTheme.background)
-        }
-    }
-
-    // MARK: - Strengths
-
-    /// What went right with a tick, then what went wrong with a cross.
-    private func strengthsCard(_ feedback: Feedback) -> some View {
-        SummaryCard(title: "Insights") {
-            ForEach(feedback.strengths.prefix(2), id: \.self) { strength in
-                Label(strength, systemImage: "checkmark")
-                    .labelStyle(InsightLabelStyle(tint: AppTheme.success))
-            }
-            ForEach(feedback.weaknesses, id: \.self) { weakness in
-                Label(weakness, systemImage: "xmark")
-                    .labelStyle(InsightLabelStyle(tint: AppTheme.record))
-            }
-        }
     }
 
     // MARK: - Again
@@ -195,8 +240,7 @@ struct FeedbackReport<PracticeAction: View>: View {
 
     /// What to improve, most important first: the interview's focus, then
     /// anything else an answer fell short on. Only what this interview
-    /// showed, one card each, side by side, swiped through rather than
-    /// stacked down the page.
+    /// showed.
     private func growthAreas(_ feedback: Feedback) -> [Skill] {
         let flagged = rehearsal.transcript.compactMap(\.weakSkill)
         var ordered = [feedback.focus] + flagged
@@ -213,36 +257,6 @@ struct FeedbackReport<PracticeAction: View>: View {
             return moment.note
         }
         return skill.advice
-    }
-
-    @ViewBuilder
-    private func growthCard(_ feedback: Feedback) -> some View {
-        let skills = growthAreas(feedback)
-        SectionTitle(title: skills.count > 1 ? "Areas for Growth" : "Area for Growth")
-        ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: AppTheme.Spacing.sm) {
-                ForEach(skills, id: \.self) { skill in
-                    growthPage(skill, feedback)
-                        // The next card peeks in from the right, so it's
-                        // clear there's more to swipe to.
-                        .containerRelativeFrame(.horizontal) { width, _ in
-                            skills.count > 1 ? width - 28 : width
-                        }
-                        .id(skill)
-                }
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .scrollTargetLayout()
-        }
-        .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $growthPage)
-        .scrollIndicators(.hidden)
-        .scrollClipDisabled()
-        .scrollDisabled(skills.count < 2)
-        if skills.count > 1 {
-            GrowthDots(count: skills.count, current: skills.firstIndex(of: growthPage ?? skills[0]) ?? 0)
-                .frame(maxWidth: .infinity)
-        }
     }
 
     private func growthPage(_ skill: Skill, _ feedback: Feedback) -> some View {
@@ -275,12 +289,11 @@ struct FeedbackReport<PracticeAction: View>: View {
     @ViewBuilder
     private func questionBreakdown(_ feedback: Feedback) -> some View {
         if !rehearsal.transcript.isEmpty {
-            SectionTitle(title: "Review Your Answers")
             VStack(spacing: 0) {
                 ForEach(Array(numberedTranscript.enumerated()), id: \.offset) { index, item in
                     if index > 0 { Divider().padding(.leading, 52) }
                     Button {
-                        openQuestion = OpenQuestion(number: item.number, entry: item.entry, focus: feedback.focus, areas: feedback.areas(for: item.entry))
+                        sheet = .answer(OpenQuestion(number: item.number, entry: item.entry, focus: feedback.focus, areas: feedback.areas(for: item.entry)))
                     } label: {
                         questionRow(number: item.number, entry: item.entry, score: feedback.score(for: item.entry))
                     }
@@ -289,19 +302,6 @@ struct FeedbackReport<PracticeAction: View>: View {
             }
             .cardBackground()
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
-            #if DEBUG
-            .task {
-                guard appState.debugOpensFirstAnswer, let first = numberedTranscript.first else { return }
-                appState.debugOpensFirstAnswer = false
-                try? await Task.sleep(for: .seconds(0.6))
-                openQuestion = OpenQuestion(number: first.number, entry: first.entry, focus: feedback.focus, areas: feedback.areas(for: first.entry))
-            }
-            #endif
-            .sheet(item: $openQuestion) { open in
-                NavigationStack {
-                    AnswerReviewView(number: open.number, entry: open.entry, focus: open.focus, areas: open.areas)
-                }
-            }
         }
     }
 
@@ -341,21 +341,23 @@ struct FeedbackReport<PracticeAction: View>: View {
         }
     }
 
-    /// When it took place, in full, at the end: "Saturday, 10 October 2026
-    /// at 9:32 AM".
-    private var footer: some View {
-        Text(rehearsal.date.formatted(.dateTime.weekday(.wide).day().month(.wide).year().hour().minute()))
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, AppTheme.Spacing.md)
-        .padding(.top, AppTheme.Spacing.xs)
-    }
-
     private var numberedTranscript: [(number: Int, entry: TranscriptEntry)] {
         var number = 0
         return rehearsal.transcript.map { entry in
             if !entry.isFollowUp { number += 1 }
             return (max(number, 1), entry)
+        }
+    }
+}
+
+/// The two pages a report is split over.
+enum ReportPage {
+    case overview, answers
+
+    var title: String {
+        switch self {
+        case .overview: "Your Score"
+        case .answers: "Your Answers"
         }
     }
 }
@@ -372,39 +374,96 @@ private struct OpenQuestion: Identifiable {
 /// One area in a list: its symbol and name, a bar, and its score out of 100.
 struct AreaRow: View {
     let area: AreaScore
-    static let symbolWidth: CGFloat = 24
 
     var body: some View {
-        // The symbol, name, score and chevron share the first line, as
-        // Settings lines up a row; the bar sits under the name.
+        AreaScoreRow(area: area.area, score: area.score)
+            .accessibilityHint("Shows how it's worked out")
+    }
+}
+
+/// One area of the score: symbol, name, score and chevron share the first
+/// line, as Settings lines up a row, with the bar under the name. Progress
+/// adds the change since the first interview before the score, has no
+/// chevron since its rows don't open anything, and draws the symbol larger
+/// as a button that says what the area measures.
+struct AreaScoreRow: View {
+    let area: ScoreArea
+    let score: Int
+    var delta: Int?
+    var showsChevron = true
+    var symbolExplains = false
+    static let symbolWidth: CGFloat = 24
+    @State private var isExplaining = false
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
-                Image(systemName: area.area.symbol)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(AppTheme.graphic)
-                    .frame(width: Self.symbolWidth)
-                Text(area.area.title)
+                if symbolExplains {
+                    explainingSymbol
+                } else {
+                    Image(systemName: area.symbol)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: Self.symbolWidth)
+                }
+                Text(area.title)
                     .foregroundStyle(Color.primary)
                 Spacer()
-                Text("\(area.score)")
+                if let delta {
+                    DeltaText(delta: delta)
+                }
+                Text("\(score)")
                     .font(.headline.monospacedDigit())
                     .foregroundStyle(Color.primary)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
-            ProgressView(value: Double(area.score), total: 100)
+            ProgressView(value: Double(score), total: 100)
                 .tint(AppTheme.graphic)
-                .padding(.leading, Self.symbolWidth + AppTheme.Spacing.sm)
+                .padding(.leading, (symbolExplains ? 36 : Self.symbolWidth) + AppTheme.Spacing.sm)
                 // Ends under the score, not the chevron.
-                .padding(.trailing, 20)
+                .padding(.trailing, showsChevron ? 20 : 0)
         }
         .padding(.horizontal, AppTheme.Spacing.md)
         .padding(.vertical, AppTheme.Spacing.sm)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(area.area.title), \(area.score) out of 100")
-        .accessibilityHint("Shows how it's worked out")
+        .accessibilityElement(children: symbolExplains ? .contain : .ignore)
+        .accessibilityLabel("\(area.title), \(score) out of 100")
+        .accessibilityValue(delta.map { $0 == 0 ? "No change" : $0 > 0 ? "Up \($0)" : "Down \(-$0)" } ?? "")
+    }
+
+    /// The symbol in a soft circle; a tap says what the area measures and
+    /// how it's scored, without leaving the page.
+    private var explainingSymbol: some View {
+        Button {
+            isExplaining = true
+        } label: {
+            Image(systemName: area.symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(AppTheme.brand)
+                .frame(width: 36, height: 36)
+                .background(AppTheme.brand.opacity(0.12), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 6 }
+        .accessibilityLabel("What \(area.title) measures")
+        .popover(isPresented: $isExplaining) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(area.title)
+                    .font(.headline)
+                Text(area.measures)
+                Text(area.method)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: 260, alignment: .leading)
+            .padding()
+            .presentationCompactAdaptation(.popover)
+        }
     }
 }
 
@@ -477,8 +536,8 @@ struct AreaDetailView: View {
     }
 }
 
-/// Where a score sits: four bands in the ring's colors, labelled, with a
-/// marker at the score.
+/// Where a score sits: four bands in the ring's colors with a marker at
+/// the score, and a legend naming each band and its range.
 private struct ScoreScale: View {
     let score: Int
 
@@ -505,55 +564,29 @@ private struct ScoreScale: View {
                 .frame(height: 14)
             }
             .frame(height: 14)
-            // Where each band starts; the band's name is the heading above.
-            GeometryReader { proxy in
-                ForEach([0, 40, 80, 90, 100], id: \.self) { mark in
-                    Text("\(mark)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                        .position(x: min(max(proxy.size.width * CGFloat(mark) / 100, 8), proxy.size.width - 10), y: 7)
+            // What each color means: two columns, the score's own band
+            // in full strength, the rest dimmed as on the bar.
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 4) {
+                ForEach(Feedback.Band.allCases, id: \.self) { band in
+                    let isCurrent = Feedback.Band(score: score) == band
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(ScoreRing.color(for: band.range.lowerBound))
+                            .frame(width: 6, height: 6)
+                        Text(band.title)
+                            .foregroundStyle(isCurrent ? Color.primary : Color.secondary)
+                            .fontWeight(isCurrent ? .semibold : .regular)
+                        Text("\(band.range.lowerBound)–\(band.range.upperBound)")
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                    }
+                    .font(.caption2)
                 }
             }
-            .frame(height: 14)
+            .padding(.top, AppTheme.Spacing.xs)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(Feedback.Band(score: score).title), \(score) out of 100")
-    }
-}
-
-/// Which area for growth is in view: a row of dots, the current one a
-/// longer capsule in the accent, as the system page control marks a page.
-private struct GrowthDots: View {
-    let count: Int
-    let current: Int
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<count, id: \.self) { index in
-                Capsule()
-                    .fill(index == current ? AppTheme.graphic : Color(.systemGray4))
-                    .frame(width: index == current ? 16 : 6, height: 6)
-            }
-        }
-        .animation(.smooth(duration: 0.3), value: current)
-        .padding(.top, AppTheme.Spacing.xxs)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Area \(current + 1) of \(count)")
-    }
-}
-
-private struct InsightLabelStyle: LabelStyle {
-    let tint: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
-            configuration.icon
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(tint)
-                .frame(width: 14)
-            configuration.title
-        }
     }
 }
 
@@ -606,7 +639,13 @@ struct RehearsalDetailView: View {
     /// Practice; anything else opens the questions that build it.
     private func improveLink(for skill: Skill, in rehearsal: Rehearsal) -> some View {
         let isCurrentFocus = rehearsal.id == appState.lastInterview?.id && skill == rehearsal.feedback?.focus
-        return PrimaryLink(title: "Improve \(skill.title)", route: isCurrentFocus ? .practice : .library(focus: skill))
+        // Secondary, so Rehearse Again stays the page's one solid button.
+        return NavigationLink(value: isCurrentFocus ? Route.practice : Route.library(focus: skill)) {
+            Text("Improve \(skill.title)")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
     }
 }
 

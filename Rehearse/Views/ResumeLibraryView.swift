@@ -65,7 +65,7 @@ struct ResumeLibraryView: View {
                     Text("Current")
                         .listHeadingInset()
                 } footer: {
-                    Text("Your Profile resume and the versions tailored for your upcoming interviews.")
+                    Text("Your resume and the versions tailored for your upcoming interviews.")
                 }
             }
 
@@ -95,7 +95,7 @@ struct ResumeLibraryView: View {
     private var current: [Entry] {
         var entries: [Entry] = []
         if let original = appState.resume.context {
-            entries.append(Entry(id: "original", choice: .original, kind: .uploaded, title: original.fileName, subtitle: "On your Profile", date: nil))
+            entries.append(Entry(id: "original", choice: .original, kind: .uploaded, title: original.fileName, subtitle: "Your resume", date: nil))
         }
         // A file added just for this mock sits with the current ones.
         if case .uploaded(let context) = selection, !appState.pastResumes.contains(where: { $0.context == context }) {
@@ -167,11 +167,7 @@ struct ResumeLibraryView: View {
                         .foregroundStyle(Color.secondary)
                 }
                 Spacer(minLength: AppTheme.Spacing.xs)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(AppTheme.brand)
-                }
+                SelectionMark(isSelected: isSelected)
             }
             .padding(.vertical, AppTheme.Spacing.xxs)
         }

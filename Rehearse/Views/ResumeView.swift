@@ -14,6 +14,8 @@ struct ResumeView: View {
     var body: some View {
         List {
             TabHeaderSection()
+            // Gone once all three steps are done.
+            if steps.contains(where: { !$0.isDone }) { progressSection }
             switch appState.resume {
             case .none:
                 emptyState
@@ -42,8 +44,7 @@ struct ResumeView: View {
             }
         }
         .appListStyle()
-        .scrollingTitle("Resume")
-        .navigationBarTitleDisplayMode(.inline)
+        .screenTitle("Resume")
         .resumeSources($source) { upload($0) }
         .confirmationDialog("Remove your resume?", isPresented: $isConfirmingRemoval, titleVisibility: .visible) {
             Button("Remove Resume", role: .destructive) { appState.removeResume() }
@@ -64,27 +65,92 @@ struct ResumeView: View {
         #endif
     }
 
-    /// Nothing yet: what a resume does, then the three ways to add one, so
-    /// how it gets in is plain before anything is tapped.
+    // MARK: - Progress
+
+    /// Where the candidate is with their resume, from what the app knows:
+    /// added, tailored for a role, then rehearsed with that version. Each
+    /// step says done or not in words and with its mark, and the next one
+    /// is named, so nothing relies on color.
+    private var steps: [(title: String, isDone: Bool)] {
+        let hasResume = appState.resume.context != nil
+        let isTailored = !appState.tailoredResumes.isEmpty
+        let rehearsedTailored = appState.tailoredResumes.contains { version in
+            guard let interview = version.interviewID.flatMap(appState.upcomingInterview(id:)) else { return false }
+            return appState.rehearsalCount(for: interview) > 0
+        }
+        return [
+            ("Add your resume", hasResume),
+            ("Tailor it for a role", hasResume && isTailored),
+            ("Rehearse with the tailored version", hasResume && isTailored && rehearsedTailored),
+        ]
+    }
+
+    private var progressSection: some View {
+        let steps = steps
+        let done = steps.filter(\.isDone).count
+        let next = steps.first { !$0.isDone }
+        return Section {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Next: \(next?.title ?? "")")
+                        .font(.headline)
+                    Text("\(done) of \(steps.count) steps done")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                    ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                        HStack(spacing: AppTheme.Spacing.sm) {
+                            Image(systemName: step.isDone ? "checkmark.circle.fill" : "\(index + 1).circle")
+                                .font(.title3)
+                                .foregroundStyle(step.isDone ? AppTheme.practiced : Color(.secondaryLabel))
+                            // The green tick says it's done; no label too.
+                            Text(step.title)
+                                .foregroundStyle(step.isDone ? Color.secondary : Color.primary)
+                            Spacer(minLength: 0)
+                        }
+                        .font(.subheadline)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(step.title), \(step.isDone ? "done" : "not done")")
+                    }
+                }
+            }
+            .padding(.vertical, AppTheme.Spacing.xxs)
+        } header: {
+            Text("Your Progress")
+                .listHeadingInset()
+        }
+    }
+
+    /// The built resume in use, when it came from the builder's notes.
+    private var isBuiltResume: Bool {
+        guard let draft = appState.resumeDraft, let context = appState.resume.context else { return false }
+        return context.fileName == draft.written().fileName
+    }
+
+    // MARK: - Empty
+
+    /// Nothing yet: what a resume does, then Build Resume first, with
+    /// uploading or scanning one as the other ways in.
     @ViewBuilder
     private var emptyState: some View {
         Section {
-            VStack(spacing: AppTheme.Spacing.sm) {
-                Image(systemName: "doc.text")
-                    .font(.system(size: 44, weight: .regular))
-                    .foregroundStyle(.secondary)
-                Text("No Resume")
-                    .font(.title2.bold())
-                Text("Add one and you’ll be asked about your own projects.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
+                    Text("No Resume Yet")
+                        .font(.title3.bold())
+                    Text("Add one and you’ll be asked about your own projects.")
+                        .foregroundStyle(.secondary)
+                }
+                PrimaryButton(title: "Build Resume", systemImage: "square.and.pencil") { source = .build }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, AppTheme.Spacing.md)
-            .listRowBackground(Color.clear)
+            .padding(.vertical, AppTheme.Spacing.xs)
         }
         Section {
-            ResumeSourceRows { source = $0 }
+            ResumeSourceRows(sources: [.file, .scan]) { source = $0 }
+        } header: {
+            Text("Or Add Your Own")
+                .listHeadingInset()
         }
     }
 
@@ -108,25 +174,8 @@ struct ResumeView: View {
             }
             .padding(.vertical, AppTheme.Spacing.xs)
             .accessibilityElement(children: .combine)
-        }
-
-        if !context.highlights.isEmpty {
-        Section {
-            ForEach(context.highlights) { highlight in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(highlight.title)
-                        .font(.headline)
-                    Text(highlight.source)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, AppTheme.Spacing.xxs)
-                .accessibilityElement(children: .combine)
-            }
-        } header: {
-            Text("You’ll Be Asked About")
-                .listHeadingInset()
-        }
+            Button(isBuiltResume ? "Edit Resume" : "Build Resume", systemImage: "square.and.pencil") { source = .build }
+                .fontWeight(.semibold)
         }
 
         // A read file's skills, while its projects can't be picked out yet.

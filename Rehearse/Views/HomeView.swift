@@ -17,9 +17,9 @@ struct HomeView: View {
                 mockInterviewCard
                 upcomingSection
                 lastScoreCard
+                recentInterviews
                 focusAreas
                 starterQuestions
-                recentInterviews
             }
             .padding(.horizontal, AppTheme.Spacing.md)
             .padding(.top, AppTheme.Spacing.xs)
@@ -147,43 +147,50 @@ struct HomeView: View {
         } else {
             // The heading opens every upcoming interview, so it takes no
             // room of its own.
-            SectionTitle(
-                title: "Upcoming Interviews",
-                actionTitle: "Add Interview",
-                actionImage: "plus",
-                action: { appState.interviewEditor = InterviewEditorRequest() },
-                titleDestination: .upcoming
-            )
+            // Adding another is on the Upcoming Interviews page itself.
+            SectionTitle(title: "Upcoming Interviews", titleDestination: .upcoming)
             upcomingCarousel
         }
     }
 
     /// Every upcoming interview as the same card, stacked like a pile of
-    /// cards with the next ones showing beneath, soonest on top. Swiping the
-    /// top card either way sends it to the back. Page dots down the right
-    /// side, in the margin, say which one is on top and how many there are.
+    /// cards with the next ones showing beneath, soonest on top. Swiping left
+    /// tucks the top card in behind the stack and brings the next forward;
+    /// swiping right brings it back out. It stops at the last one. Page dots
+    /// centered under the stack, as Wallet and the Home Screen page, say
+    /// which one is on top.
     private var upcomingCarousel: some View {
         let interviews = appState.upcomingInterviews
-        return CardStack(count: interviews.count, front: $upcomingFront) { index in
-            upcomingCard(interviews[index])
-        }
-        .overlay(alignment: .trailing) {
+        return VStack(spacing: AppTheme.Spacing.sm) {
+            CardStack(count: interviews.count, front: $upcomingFront) { index in
+                upcomingCard(interviews[index], number: index + 1)
+            }
+            .padding(.bottom, CardStackMetrics.peek * CGFloat(min(interviews.count - 1, 2)))
             if interviews.count > 1 {
-                StackDots(count: interviews.count, current: upcomingFront % interviews.count)
-                    // Centered in the 16pt page margin beside the cards.
-                    .offset(x: AppTheme.Spacing.md / 2 + StackDots.width / 2)
+                StackDots(count: interviews.count, current: min(upcomingFront, interviews.count - 1))
             }
         }
-        .padding(.bottom, CardStackMetrics.peek * CGFloat(min(interviews.count - 1, 2)))
     }
 
     /// One upcoming interview, with the one action that prepares for it.
-    private func upcomingCard(_ interview: Interview) -> some View {
+    /// `number` is its place in the stack, soonest first.
+    private func upcomingCard(_ interview: Interview, number: Int) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: AppTheme.Spacing.sm) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(interview.company ?? interview.role)
-                        .cardTitleStyle()
+                    HStack(spacing: AppTheme.Spacing.xs) {
+                        // Its place in the stack: a solid accent disc with a
+                        // rounded white figure, as tall as the title's capitals.
+                        Text("\(number)")
+                            .font(.footnote.weight(.heavy).monospacedDigit())
+                            .fontDesign(.rounded)
+                            .foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(AppTheme.brand, in: Circle())
+                            .accessibilityLabel("Interview \(number)")
+                        Text(interview.company ?? interview.role)
+                            .cardTitleStyle()
+                    }
                     if interview.company != nil {
                         // Second in line after the company, so a size up from
                         // the details and in black.
@@ -193,18 +200,19 @@ struct HomeView: View {
                 }
                 .lineLimit(1)
                 Spacer(minLength: 0)
-                DateTile(date: interview.date)
+                CountdownTile(date: interview.date)
             }
 
-            // "In 3 days at 3:00 PM" / "20-minute Technical Interview", as
-            // Calendar lists an event's details: black text at medium weight,
-            // under the role, with gray icons so the green status and the
-            // button stay the loudest things on the card.
+            // "29 Oct, 3:00 PM" / "20 mins Tech Interview", as Calendar
+            // lists an event's details: black text at medium weight, under
+            // the role, with gray icons so the green status and the button
+            // stay the loudest things on the card. The tile says how soon;
+            // this says when.
             VStack(alignment: .leading, spacing: 6) {
                 if let date = interview.date {
-                    Label("\(interview.countdownText ?? date.formatted(date: .abbreviated, time: .omitted)) at \(date.formatted(date: .omitted, time: .shortened))", systemImage: "clock")
+                    Label("\(date.formatted(.dateTime.day().month(.abbreviated))), \(date.formatted(date: .omitted, time: .shortened))", systemImage: "clock")
                 }
-                Label("\(interview.durationMinutes)-minute \(interview.type.interviewName)", systemImage: "briefcase")
+                Label("\(interview.durationMinutes) mins \(interview.type == .technical ? "Tech" : "Non-Tech") Interview", systemImage: "briefcase")
             }
             .font(.subheadline.weight(.medium))
             .labelStyle(DetailLabelStyle(iconColor: .secondary))
@@ -241,19 +249,22 @@ struct HomeView: View {
         .accessibilityAction(named: "Edit \(interview.title)") { edit(interview) }
     }
 
-    /// Whether this interview has been rehearsed: "Practiced" in green, or
-    /// "Not practiced yet" in gray. No date, since the score card below
-    /// names the day.
+    /// Whether this interview has been rehearsed, in words with a symbol:
+    /// a filled green tick and "Practiced", or a dashed circle and "Not
+    /// practiced yet" in gray. A tick alone didn't say what it meant.
     @ViewBuilder
     private func preparationLabel(for interview: Interview) -> some View {
-        if appState.rehearsalCount(for: interview) > 0 {
-            PracticedLabel()
-        } else {
-            Text("Not practiced yet")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        let isPracticed = appState.rehearsalCount(for: interview) > 0
+        Label {
+            Text(isPracticed ? "Practiced" : "Not practiced yet")
+                .font(.subheadline.weight(isPracticed ? .semibold : .regular))
+        } icon: {
+            Image(systemName: isPracticed ? "checkmark.circle.fill" : "circle.dashed")
+                .font(.title3)
         }
+        .foregroundStyle(isPracticed ? AppTheme.practiced : Color.secondary)
+        .labelStyle(.titleAndIcon)
+        .lineLimit(1)
     }
 
     private var addInterviewCard: some View {
@@ -272,40 +283,40 @@ struct HomeView: View {
 
     // MARK: - Last mock score
 
-    /// The most recent interview of any kind, so the score is always the latest.
+    /// The most recent interview, in one compact card: what it was, and
+    /// the way into its feedback, with the ring filled to the score on the
+    /// right with the score in it.
     @ViewBuilder
     private var lastScoreCard: some View {
         if let last = appState.lastInterview, let feedback = last.feedback {
             NavigationLink(value: Route.rehearsal(last.id)) {
-                VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-                    // What it is in gray with Details on the right, as Health
-                    // heads a card, then the interview's name as the title.
-                    // No symbol, so both lines start on the same edge.
-                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
-                        CardHeader(title: "Last Mock Interview", detail: "Details", showsChevron: true)
+                HStack(alignment: .center, spacing: AppTheme.Spacing.md) {
+                    // What it was. The whole card opens the feedback, with
+                    // the chevron as its one sign, so no button of its own.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Last Mock Interview")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         Text(last.title)
                             .font(.headline)
-                            .lineLimit(1)
+                            .lineLimit(2)
                     }
-                    HStack(spacing: AppTheme.Spacing.lg) {
-                        ScoreRing(score: feedback.overall, caption: "out of 100", size: 96)
-                        // The best and the weakest of the five areas, so the
-                        // card says what to keep and what to fix.
-                        let ranked = feedback.areas.sorted { $0.score > $1.score }
-                        VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-                            if let highest = ranked.first {
-                                ScoreBar(title: highest.area.title, score: highest.score)
-                            }
-                            if let lowest = ranked.last {
-                                ScoreBar(title: lowest.area.title, score: lowest.score)
-                            }
-                        }
-                        .font(.subheadline)
-                    }
+                    Spacer(minLength: AppTheme.Spacing.xs)
+                    ScoreRing(score: feedback.overall, size: 52)
+                        .accessibilityHidden(true)
+                    // At the card's edge, as a row's chevron sits.
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
                 .padding(AppTheme.Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .cardBackground()
                 .foregroundStyle(Color.primary)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Last mock interview, \(last.title), scored \(feedback.overall)")
+                .accessibilityHint("Opens its feedback")
             }
             .buttonStyle(CardButtonStyle())
         }
@@ -402,7 +413,7 @@ struct HomeView: View {
     private var recentInterviews: some View {
         let interviews = appState.interviews
         if !interviews.isEmpty {
-            SectionTitle(title: "Recent Interviews", actionTitle: "See All", destination: .history)
+            SectionTitle(title: "History", titleDestination: .history)
             VStack(spacing: 0) {
                 ForEach(Array(interviews.prefix(2).enumerated()), id: \.element.id) { index, rehearsal in
                     if index > 0 { Divider().padding(.leading, AppTheme.Spacing.md) }
@@ -471,16 +482,16 @@ struct ProfileAvatar: View {
 /// Which card in a stack is on top: a column of dots, the current one a
 /// longer capsule in the accent, as the system page control marks a page.
 private struct StackDots: View {
-    static let width: CGFloat = 6
+    static let size: CGFloat = 7
     let count: Int
     let current: Int
 
     var body: some View {
-        VStack(spacing: 5) {
+        HStack(spacing: 6) {
             ForEach(0..<count, id: \.self) { index in
                 Capsule()
                     .fill(index == current ? AppTheme.graphic : Color(.systemGray4))
-                    .frame(width: Self.width, height: index == current ? 16 : Self.width)
+                    .frame(width: index == current ? 18 : Self.size, height: Self.size)
             }
         }
         .animation(.smooth(duration: 0.3), value: current)
@@ -549,62 +560,63 @@ struct InterviewRow: View {
                     .font(.rowScore)
                     .accessibilityLabel("Score \(score)")
             }
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
         }
         .foregroundStyle(Color.primary)
         .accessibilityElement(children: .combine)
     }
 }
 
-/// Cards piled on one another, the top one in full and the next two peeking
-/// out beneath it, smaller and fainter, like a stack in Wallet. The stack
-/// follows the finger: as the top card slides sideways it tilts away in
-/// perspective and the card beneath rises to take its place. Let go far
-/// enough and the top card leaves and fades back in at the bottom of the
-/// pile; otherwise everything springs back.
+/// A pile of cards: the top one in full and the next two peeking out
+/// beneath it, smaller and fainter, like a stack in Wallet. It has an end:
+/// cards already seen wait out of sight behind, so it never loops.
+///
+/// Swiping left, the top card follows the finger, tilting a little, and the
+/// card beneath rises. Let go and it slides fully clear of the stack, then
+/// goes in behind it and fades. Swiping right does the reverse: the card
+/// before comes out from behind, clear of the stack, then slides over the
+/// top. A card only changes layer while it's clear of the others, so
+/// nothing ever pops through.
 struct CardStack<Card: View>: View {
     let count: Int
     @Binding var front: Int
     @ViewBuilder let card: (Int) -> Card
 
     @State private var drag: CGFloat = 0
-    @State private var isThrowing = false
-    /// The card that just went to the back, faded in once it's there.
-    @State private var arriving: Int?
+    /// Decided at the start of each drag, so a drag is either the card's or
+    /// the page's, never both.
+    @State private var isSideways: Bool?
+    @State private var isMoving = false
+    @State private var moving: Int?
+    @State private var moveX: CGFloat = 0
+    @State private var moveIsBehind = false
+    @State private var moveIsOnTop = false
+    @State private var width: CGFloat = 360
     @State private var swaps = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// How far a drag goes before the next card is fully in front.
-    private let travel: CGFloat = 220
+    private var travel: CGFloat { width * 0.6 }
+    /// Far enough aside that a card is clear of the stack.
+    private var aside: CGFloat { width + 24 }
 
+    private var top: Int { min(max(front, 0), max(count - 1, 0)) }
+    private var hasNext: Bool { top < count - 1 }
+    private var hasPrevious: Bool { top > 0 }
     /// From 0 at rest to 1 when the top card is out of the way.
-    private var progress: CGFloat { min(abs(drag) / travel, 1) }
+    private var progress: CGFloat { drag < 0 && hasNext ? min(-drag / travel, 1) : 0 }
 
     var body: some View {
-        let top = count > 0 ? front % count : 0
         EqualHeightStack {
             ForEach(0..<count, id: \.self) { index in
-                let depth = (index - top + count) % count
-                // Cards behind move up a place as the top card leaves.
-                let position = depth == 0 ? 0 : CGFloat(depth) - progress
+                let depth = index - top
                 card(index)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .shadow(color: .black.opacity(depth == 0 ? 0.08 : 0), radius: 14, y: 6)
-                    .scaleEffect(scale(at: position), anchor: .bottom)
-                    .offset(y: min(position, 2) * CardStackMetrics.peek)
-                    // The card sent to the back grows into place from behind.
-                    .scaleEffect(index == arriving ? 0.9 : 1, anchor: .bottom)
-                    .opacity(index == arriving ? 0 : opacity(at: position))
-                    .modifier(TopCardMotion(drag: depth == 0 ? drag : 0, progress: depth == 0 ? progress : 0, isFlat: reduceMotion))
-                    .zIndex(Double(count - depth))
-                    .allowsHitTesting(depth == 0)
+                    .modifier(placement(for: index, depth: depth))
+                    .allowsHitTesting(depth == 0 && !isMoving)
                     .accessibilityHidden(depth != 0)
             }
         }
-        // Alongside the page's scrolling: only a mostly sideways drag moves the card.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .simultaneousGesture(count > 1 ? swipe : nil)
         .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.7), trigger: swaps)
         #if DEBUG
@@ -612,11 +624,40 @@ struct CardStack<Card: View>: View {
         #endif
         .accessibilityAdjustableAction { direction in
             switch direction {
-            case .increment: step(by: 1)
-            case .decrement: step(by: -1)
+            case .increment: sendTopCardBehind()
+            case .decrement: bringPreviousCardBack()
             @unknown default: break
             }
         }
+    }
+
+    private func placement(for index: Int, depth: Int) -> CardPlacement {
+        let behind = CardPlacement(x: 0, y: 2 * CardStackMetrics.peek, scale: scale(at: 2.6), opacity: 0, z: -1, tilt: 0, shadow: 0)
+        if index == moving {
+            if moveIsBehind {
+                var place = behind
+                place.x = moveX
+                place.z = moveIsOnTop ? Double(count + 1) : -1
+                return place
+            }
+            return CardPlacement(x: moveX, y: 0, scale: 1, opacity: 1, z: moveIsOnTop ? Double(count + 1) : -1, tilt: tilt(for: moveX), shadow: 0.08)
+        }
+        if depth < 0 { return behind }
+        let position = depth == 0 ? 0 : CGFloat(depth) - progress
+        return CardPlacement(
+            x: depth == 0 ? drag : 0,
+            y: min(position, 2) * CardStackMetrics.peek,
+            scale: depth == 0 ? 1 - progress * 0.03 : scale(at: position),
+            opacity: opacity(at: position),
+            z: Double(count - depth),
+            tilt: depth == 0 ? tilt(for: drag) : 0,
+            shadow: depth == 0 ? 0.08 : 0
+        )
+    }
+
+    /// A slight turn away as the card moves aside, in proportion.
+    private func tilt(for x: CGFloat) -> Double {
+        reduceMotion ? 0 : Double(x / max(width, 1)) * 8
     }
 
     private func scale(at position: CGFloat) -> CGFloat {
@@ -628,106 +669,137 @@ struct CardStack<Card: View>: View {
     }
 
     private var swipe: some Gesture {
-        DragGesture(minimumDistance: 12)
+        DragGesture(minimumDistance: 10)
             .onChanged { value in
-                guard !isThrowing, abs(value.translation.width) > abs(value.translation.height) else { return }
-                // Rubber-banded past the travel distance, like an overscroll.
+                guard !isMoving else { return }
+                if isSideways == nil {
+                    isSideways = abs(value.translation.width) > abs(value.translation.height)
+                }
+                guard isSideways == true else { return }
                 let x = value.translation.width
-                drag = abs(x) <= travel ? x : (x > 0 ? 1 : -1) * (travel + (abs(x) - travel) * 0.4)
+                // With nowhere to go the card only gives a little, so the
+                // end of the stack is felt.
+                if x < 0 {
+                    drag = hasNext ? x : x * 0.15
+                } else {
+                    drag = hasPrevious ? min(x, 80) * 0.6 : x * 0.15
+                }
             }
             .onEnded { value in
-                guard !isThrowing else { return }
+                defer { isSideways = nil }
+                guard isSideways == true, !isMoving else { return }
                 let projected = value.predictedEndTranslation.width
-                guard drag != 0, abs(projected) > travel * 0.6 else {
-                    withAnimation(.smooth(duration: 0.35)) { drag = 0 }
-                    return
+                if projected < -travel * 0.5, hasNext {
+                    sendTopCardBehind()
+                } else if projected > travel * 0.35, hasPrevious {
+                    bringPreviousCardBack()
+                } else {
+                    withAnimation(.spring(duration: 0.35, bounce: 0.25)) { drag = 0 }
                 }
-                throwTopCard(toward: projected > 0 ? 1 : -1)
             }
     }
 
-    /// Finishes the slide, then quietly moves the card to the back. The next
-    /// card is already in front by then, so nothing jumps.
-    private func throwTopCard(toward direction: CGFloat) {
-        isThrowing = true
-        let leaving = front % count
-        // Fully off screen, so it never shows over the card coming up.
-        withAnimation(.spring(duration: 0.3, bounce: 0)) {
-            drag = direction * travel * 2.2
+    /// Clear of the stack first, then behind it.
+    private func sendTopCardBehind() {
+        guard hasNext, !isMoving else { return }
+        isMoving = true
+        let card = top
+        var hold = Transaction()
+        hold.disablesAnimations = true
+        withTransaction(hold) {
+            moving = card
+            moveX = drag
+            moveIsBehind = false
+            moveIsOnTop = true
+        }
+        withAnimation(.spring(duration: 0.32, bounce: 0)) {
+            moveX = -aside
+            drag = 0
+            front = card + 1
         } completion: {
-            var settle = Transaction()
-            settle.disablesAnimations = true
-            withTransaction(settle) {
-                arriving = leaving
-                front = (front + 1) % count
-                drag = 0
-            }
+            // Clear of the stack, so going under shows no jump.
+            withTransaction(hold) { moveIsOnTop = false }
             swaps += 1
-            withAnimation(.smooth(duration: 0.4)) {
-                arriving = nil
+            withAnimation(.spring(duration: 0.42, bounce: 0)) {
+                moveX = 0
+                moveIsBehind = true
             } completion: {
-                isThrowing = false
+                moving = nil
+                isMoving = false
+            }
+        }
+    }
+
+    /// Out from behind to clear of the stack, then over the top.
+    private func bringPreviousCardBack() {
+        guard hasPrevious, !isMoving else { return }
+        isMoving = true
+        let card = top - 1
+        var hold = Transaction()
+        hold.disablesAnimations = true
+        withTransaction(hold) {
+            moving = card
+            moveX = 0
+            moveIsBehind = true
+            moveIsOnTop = false
+        }
+        withAnimation(.spring(duration: 0.3, bounce: 0)) {
+            moveX = -aside
+            moveIsBehind = false
+            drag = 0
+        } completion: {
+            withTransaction(hold) { moveIsOnTop = true }
+            swaps += 1
+            withAnimation(.spring(duration: 0.42, bounce: 0.1)) {
+                moveX = 0
+                front = card
+            } completion: {
+                moving = nil
+                isMoving = false
             }
         }
     }
 
     #if DEBUG
     /// `-demoSwipe` plays finger-like swipes for screen recordings, since
-    /// the simulator can't be touched from a script: a short drag that springs
-    /// back, then a swipe left and a swipe right that go through.
+    /// the simulator can't be dragged from a script.
     private func playDemoSwipes() async {
         guard ProcessInfo.processInfo.arguments.contains("-demoSwipe"), count > 1 else { return }
         try? await Task.sleep(for: .seconds(1.5))
-        for (distance, flicks) in [(-90.0, false), (-200.0, true), (180.0, true), (-210.0, true)] {
-            // About 0.4 seconds of finger movement at 60 frames a second, easing out.
-            for frame in 1...24 {
-                let t = Double(frame) / 24
-                drag = distance * (1 - pow(1 - t, 2))
+        for distance in [-120.0, 120.0] {
+            for frame in 1...20 {
+                let t = Double(frame) / 20
+                let x = distance * (1 - pow(1 - t, 2))
+                drag = x < 0 ? (hasNext ? x : x * 0.15) : (hasPrevious ? min(x, 80) * 0.6 : x * 0.15)
                 try? await Task.sleep(for: .milliseconds(16))
             }
-            if flicks {
-                throwTopCard(toward: distance > 0 ? 1 : -1)
-            } else {
-                withAnimation(.smooth(duration: 0.35)) { drag = 0 }
-            }
+            if distance < 0 { sendTopCardBehind() } else { bringPreviousCardBack() }
             try? await Task.sleep(for: .seconds(1.6))
         }
     }
     #endif
-
-    private func step(by step: Int) {
-        withAnimation(.smooth(duration: 0.35)) {
-            front = (front + step + count) % count
-        }
-        swaps += 1
-    }
 }
 
-/// The top card's motion: it follows the finger and turns slightly away in
-/// perspective, staying solid so it never blends with the card beneath.
-private struct TopCardMotion: ViewModifier {
-    let drag: CGFloat
-    let progress: CGFloat
-    var isFlat = false
+/// One card's place in the stack. Every value animates, so a card always
+/// moves smoothly from one place to the next.
+private struct CardPlacement: ViewModifier {
+    var x: CGFloat
+    var y: CGFloat
+    var scale: CGFloat
+    var opacity: Double
+    var z: Double
+    var tilt: Double
+    var shadow: Double
 
     func body(content: Content) -> some View {
         content
-            .rotation3DEffect(
-                .degrees(isFlat ? 0 : Double(drag / 18).clamped(to: -14...14)),
-                axis: (x: 0, y: 1, z: 0),
-                perspective: 0.5
-            )
-            .scaleEffect(1 - progress * 0.04)
-            .offset(x: drag)
+            .shadow(color: .black.opacity(shadow), radius: 14, y: 6)
+            .scaleEffect(scale, anchor: .bottom)
+            .rotation3DEffect(.degrees(tilt), axis: (x: 0, y: 1, z: 0), perspective: 0.4)
+            .offset(x: x, y: y)
+            .opacity(opacity)
+            .zIndex(z)
     }
-}
-
-private extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self { min(max(self, range.lowerBound), range.upperBound) }
-}
-
-private extension Array {
-    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
 }
 
 enum CardStackMetrics {

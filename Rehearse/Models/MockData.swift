@@ -121,19 +121,20 @@ enum MockData {
                 ProjectNote(
                     id: "finlo",
                     title: "Payment reconciliation service",
-                    place: "Internship at Finlo",
+                    kind: .internship,
+                    role: "Built the service on my own, with a mentor reviewing",
                     notes: "go service at finlo that matches bank transactions with our ledger, around 40k a day. before this the finance team did it by hand"
                 ),
                 ProjectNote(
                     id: "campus-eats",
                     title: "Campus Eats",
-                    place: "Personal project",
+                    kind: .personal,
                     notes: "मैंने अपने college के लिए food order करने का app बनाया, React Native में। करीब 2000 students इसे use करते हैं।"
                 ),
                 ProjectNote(
                     id: "scheduler",
                     title: "Course schedule optimizer",
-                    place: "University project",
+                    kind: .academic,
                     notes: "python tool, you give it the course list and it makes a timetable with no clashes"
                 ),
             ],

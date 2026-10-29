@@ -116,7 +116,7 @@ struct TailorResumeView: View {
 
         if interviewID == nil {
             Section {
-                LabeledTextField(title: "Company", text: $company, prompt: "Optional", contentType: .organizationName)
+                LabeledTextField(title: "Company Name", text: $company, prompt: "Optional", contentType: .organizationName)
                 LabeledTextField(title: "Job Role", text: $role, prompt: "Required", contentType: .jobTitle)
             } header: {
                 if appState.upcomingInterviews.isEmpty {
@@ -127,13 +127,19 @@ struct TailorResumeView: View {
         }
 
         Section {
-            TextField("Paste the job description", text: $posting, axis: .vertical)
+            TextField("Job Posting", text: $posting, prompt: .prompt("Paste it here"), axis: .vertical)
                 .lineLimit(5...10)
         } header: {
-            Text("Job Posting")
+            // Optional in the heading itself, where it's read first, as the
+            // other fields say it in their placeholders.
+            HStack(alignment: .firstTextBaseline) {
+                Text("Job Posting")
+                Spacer()
+                Text("Optional")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
             .listHeadingInset()
-        } footer: {
-            Text("Optional. Helps match the words this team uses.")
         }
     }
 
@@ -145,11 +151,7 @@ struct TailorResumeView: View {
             HStack(spacing: AppTheme.Spacing.sm) {
                 VStack(alignment: .leading, spacing: 2) { label() }
                 Spacer(minLength: AppTheme.Spacing.xs)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(AppTheme.brand)
-                }
+                SelectionMark(isSelected: isSelected)
             }
             .padding(.vertical, 2)
             .contentShape(Rectangle())
@@ -187,32 +189,29 @@ struct TailorResumeView: View {
 
     // MARK: - Results
 
-    /// The three versions as pages, side by side, picked by looking at them
-    /// rather than reading about them; then what the chosen one changed.
+    /// The three versions as tabs, the chosen one's page right beneath at a
+    /// readable size, so choosing and seeing are one step; then, in a line
+    /// each, what it changed.
     @ViewBuilder
     private func results(_ versions: [ResumeVersion]) -> some View {
         Section {
-            ResumeShelf {
+            Picker("Version", selection: $selection.animation(.snappy(duration: 0.25))) {
                 ForEach(versions.indices, id: \.self) { index in
-                    let version = versions[index]
-                    ResumeThumbnail(
-                        context: version.context,
-                        title: version.lead,
-                        subtitle: version.summary,
-                        isSelected: selection == index
-                    ) {
-                        withAnimation(.snappy(duration: 0.25)) { selection = index }
-                    }
+                    Text(versions[index].lead).tag(index)
                 }
             }
-        } header: {
-            Text("Three Ways to Lead")
-            .listHeadingInset()
-        } footer: {
-            Text("The first suits \(versions[0].role.localizedLowercase) roles best.")
+            .pickerStyle(.segmented)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
         }
 
-        ResumeVersionDetails(version: versions[selection], linksQuestions: false)
+        Section {
+            FittedResumePage(context: versions[selection].context)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+        }
+
+        ResumeVersionDetails(version: versions[selection], linksQuestions: false, isCompact: true)
     }
 
     private func save(_ version: ResumeVersion) {
@@ -230,12 +229,17 @@ struct ResumeVersionDetails: View {
     let version: ResumeVersion
     /// On the Profile stack, gaps open their practice question.
     var linksQuestions = true
+    /// A line per change and gap titles only, with the page shown above.
+    var isCompact = false
 
     @Environment(AppState.self) private var appState
 
     var body: some View {
         Section {
             ForEach(version.changes) { change in
+                if isCompact {
+                    compactChange(change)
+                } else {
                 // What kind of change, by its symbol: moved up, rewritten
                 // or cut; then what it was about and the change itself.
                 HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.sm) {
@@ -254,6 +258,7 @@ struct ResumeVersionDetails: View {
                 }
                 .padding(.vertical, AppTheme.Spacing.xxs)
                 .accessibilityElement(children: .combine)
+                }
             }
         } header: {
             Text("What Changed")
@@ -264,7 +269,11 @@ struct ResumeVersionDetails: View {
             ForEach(version.gaps) { gap in
                 let question = gap.questionID.flatMap { id in appState.library.first { $0.id == id } }
                 if linksQuestions, let question {
-                    NavigationLink(value: Route.question(question)) { gapLabel(gap) }
+                    NavigationLink(value: Route.question(question)) {
+                        if isCompact { Text(gap.title) } else { gapLabel(gap) }
+                    }
+                } else if isCompact {
+                    Text(gap.title)
                 } else {
                     gapLabel(gap)
                 }
@@ -273,8 +282,28 @@ struct ResumeVersionDetails: View {
             Text("Not on Your Resume")
             .listHeadingInset()
         } footer: {
-            Text("Rehearse these before the day.")
+            if !isCompact {
+                Text("Rehearse these before the day.")
+            }
         }
+    }
+
+    /// The kind of change by its symbol, what it was about, and the kind
+    /// in a word on the right.
+    private func compactChange(_ change: ResumeChange) -> some View {
+        HStack(spacing: AppTheme.Spacing.sm) {
+            Image(systemName: change.kind.symbol)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+            Text(change.title)
+                .lineLimit(1)
+            Spacer(minLength: AppTheme.Spacing.xs)
+            Text(change.kind.shortLabel)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func gapLabel(_ gap: ResumeGap) -> some View {
@@ -287,6 +316,16 @@ struct ResumeVersionDetails: View {
         }
         .padding(.vertical, AppTheme.Spacing.xxs)
         .accessibilityElement(children: .combine)
+    }
+}
+
+private extension ResumeChange.Kind {
+    var shortLabel: String {
+        switch self {
+        case .movedUp: "Moved up"
+        case .rewritten: "Rewritten"
+        case .cut: "Left out"
+        }
     }
 }
 

@@ -17,7 +17,6 @@ struct LiveInterviewView: View {
     /// Bumped to have the interviewer say the question again.
     @State private var replay = 0
     /// The candidate's own camera, in the corner of the call.
-    @State private var isCameraOn = true
 
     private enum Stage: Equatable {
         case interviewing
@@ -64,10 +63,10 @@ struct LiveInterviewView: View {
             InterviewerVideo(mood: mood)
                 // The candidate sees themselves too, as in a video call.
                 .overlay(alignment: .bottomTrailing) {
-                    SelfViewTile(isTalking: mood == .listening, isCameraOn: isCameraOn)
+                    SelfViewTile(isTalking: mood == .listening, isCameraOn: true)
                         .padding(AppTheme.Spacing.sm)
                 }
-                .frame(minHeight: 180, maxHeight: 380)
+                .frame(minHeight: 180, maxHeight: 440)
                 .layoutPriority(0)
             if let question = service.currentQuestion {
                 // The question alone, large: it's the one thing to read.
@@ -89,18 +88,6 @@ struct LiveInterviewView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.smooth(duration: 0.35), value: service.currentQuestion)
         .onChange(of: service.currentQuestion) { isAsking = true }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            // A segment a question, and the time, in one quiet line.
-            HStack(spacing: AppTheme.Spacing.sm) {
-                QuestionSegments(service: service)
-                Text(startedAt, style: .timer)
-                    .font(.footnote.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Elapsed time")
-            }
-            .padding(.horizontal, AppTheme.Spacing.lg)
-            .padding(.vertical, AppTheme.Spacing.xs)
-        }
         .safeAreaBar(edge: .bottom) {
             AnswerButton(state: answerState, action: toggleRecording)
                 .frame(maxWidth: .infinity)
@@ -108,33 +95,38 @@ struct LiveInterviewView: View {
             .animation(.smooth(duration: 0.25), value: service.phase)
         }
         .groupedBackground()
-        .navigationTitle(questionTitle)
-        .navigationSubtitle(session.interview.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
+            // The bar holds only the call itself: how long it has run, in
+            // the middle where a title would be, and End on the right. The
+            // role was chosen on the screen before, so it isn't repeated.
+            // No question count: as in a real interview, you don't know how
+            // many are coming.
+            ToolbarItem(placement: .principal) {
+                Text(startedAt, style: .timer)
+                    .font(.headline.monospacedDigit())
+                    .accessibilityLabel("Elapsed time")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("End", role: .destructive) { isConfirmingEnd = true }
                     .tint(AppTheme.record)
                     .accessibilityLabel("End interview")
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button(isCameraOn ? "Turn Camera Off" : "Turn Camera On", systemImage: isCameraOn ? "video.fill" : "video.slash.fill") {
-                    isCameraOn.toggle()
-                }
-            }
         }
-        .confirmationDialog(endTitle, isPresented: $isConfirmingEnd, titleVisibility: .visible) {
-            if service.answeredTurns.isEmpty {
-                Button("Leave Interview", role: .destructive) { appState.closeInterview() }
-            } else {
-                Button("End and Get Feedback") { finish() }
-                Button("Discard Interview", role: .destructive) { appState.closeInterview() }
-            }
-            Button("Keep Going", role: .cancel) {}
-        } message: {
-            if !service.answeredTurns.isEmpty {
-                Text("You’ll get feedback on the \(service.answeredTurns.count) of \(service.turns.count) topics you answered.")
-            }
+        .sheet(isPresented: $isConfirmingEnd) {
+            EndInterviewSheet(
+                answered: service.answeredTurns.count,
+                total: service.turns.count,
+                isAnswering: answerState != .ready && answerState != .captured,
+                getFeedback: {
+                    isConfirmingEnd = false
+                    finish()
+                },
+                leave: {
+                    isConfirmingEnd = false
+                    appState.closeInterview()
+                }
+            )
         }
     }
 
@@ -145,16 +137,6 @@ struct LiveInterviewView: View {
         case .processing: .thinking
         case .captured, .finished: .done
         }
-    }
-
-    /// "Question 3 of 5"; follow-ups stay on their topic's number.
-    private var questionTitle: String {
-        let total = service.turns.count
-        return "Question \(min(service.turnIndex + 1, total)) of \(total)"
-    }
-
-    private var endTitle: String {
-        service.answeredTurns.isEmpty ? "Leave this interview?" : "End the interview early?"
     }
 
     private var answerState: AnswerState {
@@ -191,7 +173,9 @@ struct LiveInterviewView: View {
         if let rehearsal = appState.rehearsal(id: id) {
             ReportScroll {
                 FeedbackReport(rehearsal: rehearsal) { skill in
-                    PrimaryButton(title: "Improve \(skill.title)") {
+                    // Secondary, so Rehearse Again stays the page's one
+                    // solid button.
+                    SecondaryButton(title: "Improve \(skill.title)") {
                         if skill == rehearsal.feedback?.focus {
                             appState.closeInterviewAndPractice()
                         } else {
@@ -253,9 +237,9 @@ struct AnswerButton: View {
                         ProgressView()
                             .controlSize(.large)
                     case .captured:
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundStyle(AppTheme.success)
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 64))
+                            .foregroundStyle(.white, AppTheme.practiced)
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
@@ -302,41 +286,142 @@ struct AnswerButton: View {
     }
 }
 
-/// One segment a question: answered in the accent, the current one filling
-/// in, skipped ones hollow, the rest still to come.
-private struct QuestionSegments: View {
-    let service: MockInterviewService
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(service.turns.indices, id: \.self) { index in
-                let status = service.status(ofTurn: index)
-                Capsule()
-                    .fill(color(for: status))
-                    .overlay {
-                        if status == .skipped {
-                            Capsule().strokeBorder(AppTheme.graphic, lineWidth: 1)
-                        }
-                    }
-                    .frame(height: 4)
-            }
-        }
-        .animation(.smooth(duration: 0.3), value: service.turnIndex)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Question \(min(service.turnIndex + 1, service.turns.count)) of \(service.turns.count)")
-    }
-
-    private func color(for status: MockInterviewService.TurnStatus) -> Color {
-        switch status {
-        case .answered: AppTheme.graphic
-        case .current: AppTheme.graphic.opacity(0.45)
-        case .skipped: .clear
-        case .upcoming: AppTheme.track
-        }
-    }
-}
-
 #Preview {
     LiveInterviewView(session: InterviewSession(interview: MockData.upcomingInterview, resume: MockData.resume))
         .environment(AppState())
+}
+
+/// Ending before the last question: what each choice means before it's
+/// made. Get Feedback scores what was answered; leaving keeps nothing.
+/// Feedback can only be asked for once, since `finish` runs once.
+private struct EndInterviewSheet: View {
+    let answered: Int
+    let total: Int
+    /// An answer is being recorded or checked right now.
+    let isAnswering: Bool
+    let getFeedback: () -> Void
+    let leave: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    /// The height of what the sheet says; the sheet is exactly that tall.
+    @State private var contentHeight: CGFloat = 300
+
+    private var skipped: Int { max(total - answered, 0) }
+    private var hasAnswers: Bool { answered > 0 }
+
+    var body: some View {
+        // Top to bottom: the close button on its own row, the question,
+        // what each choice means (once there's something to lose), then
+        // the choices. The same margin above and below.
+        VStack(spacing: AppTheme.Spacing.lg) {
+            closeRow
+            heading
+            if hasAnswers { outcomes }
+            actions
+        }
+        .padding(.horizontal, AppTheme.Spacing.lg)
+        // The close button as far from the top edge as from the right.
+        .padding(.top, AppTheme.Spacing.lg + AppTheme.Spacing.xs)
+        // iOS adds the home indicator's strip below, which reads as the
+        // bottom margin, so nothing more here.
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .presentationDetents([.height(contentHeight)])
+        .presentationBackground(Color(.systemGroupedBackground))
+    }
+
+    /// Back to the interview, as a sheet closes.
+    private var closeRow: some View {
+        HStack {
+            Spacer()
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Keep going")
+        }
+        // The row only holds the button; the heading starts close below.
+        .padding(.bottom, -AppTheme.Spacing.md)
+    }
+
+    private var heading: some View {
+        VStack(spacing: AppTheme.Spacing.xs) {
+            Text(hasAnswers ? "End the interview?" : "Leave this interview?")
+                .font(.title2.bold())
+            Text(hasAnswers
+                 ? "You’ve answered \(answered) \(answered == 1 ? "question" : "questions") so far."
+                 : "You haven’t answered a question yet, so there’s nothing to give feedback on.")
+                .foregroundStyle(.secondary)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// What each choice does, as a Settings list reads: a short lead per
+    /// row, the detail in gray beneath, hairlines between.
+    private var outcomes: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            outcome("checkmark.circle.fill", AppTheme.success, "Get Feedback",
+                    "Scores the answers you gave" + (skipped > 0 ? ". Each question you didn’t get to takes 3 points off." : "."))
+            Divider().padding(.leading, 52)
+            outcome("xmark.circle.fill", AppTheme.record, "Leave Without Feedback",
+                    "Your answers aren’t saved.")
+            if isAnswering {
+                Divider().padding(.leading, 52)
+                outcome("exclamationmark.circle.fill", .orange, "Answer in Progress",
+                        "The answer you’re giving now won’t be counted.")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardBackground()
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.card, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        if hasAnswers {
+            VStack(spacing: AppTheme.Spacing.xs) {
+                PrimaryButton(title: "Get Feedback", systemImage: "text.bubble.fill", action: getFeedback)
+                Button("Leave Without Feedback", role: .destructive, action: leave)
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+        } else {
+            // The one thing to do here, so a full button, in red.
+            Button(role: .destructive, action: leave) {
+                Text("Leave Interview")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 34)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(AppTheme.record)
+        }
+    }
+
+    private func outcome(_ symbol: String, _ tint: Color, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: AppTheme.Spacing.sm) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(tint)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, AppTheme.Spacing.md)
+        .padding(.vertical, AppTheme.Spacing.sm)
+        .accessibilityElement(children: .combine)
+    }
 }

@@ -15,20 +15,18 @@ struct ProgressSteps: View {
                 HStack(spacing: AppTheme.Spacing.sm) {
                     ZStack {
                         if index < done {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(AppTheme.practiced)
+                            DoneMark()
                                 .transition(.scale.combined(with: .opacity))
                         } else if index == done {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
                             Image(systemName: "circle")
-                                .font(.body)
+                                .font(.title3)
                                 .foregroundStyle(.tertiary)
                         }
                     }
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
                     Text(steps[index])
                         .foregroundStyle(index <= done ? Color.primary : Color.secondary)
                 }

@@ -13,35 +13,34 @@ struct ResumeVersionView: View {
             List {
                 TabHeaderSection()
                 Section {
-                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(version.angle)
+                            .cardTitleStyle()
                         Text(version.company.map { "\(version.role) at \($0)" } ?? version.role)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Text(version.angle)
-                            .cardTitleStyle()
-                        Text(version.summary)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, AppTheme.Spacing.xxs)
                     }
                     .padding(.vertical, AppTheme.Spacing.xs)
                     .accessibilityElement(children: .combine)
-                    LabeledContent("File", value: version.context.fileName)
-                }
-
-                if !appState.upcomingInterviews.isEmpty {
-                    Section {
+                    if !appState.upcomingInterviews.isEmpty {
                         Picker("Use For", selection: interviewBinding) {
                             Text("No Interview").tag(Interview.ID?.none)
                             ForEach(appState.upcomingInterviews) { interview in
                                 Text(interview.company ?? interview.role).tag(Interview.ID?.some(interview.id))
                             }
                         }
-                    } footer: {
-                        Text("Mock interviews for this interview start with this version.")
                     }
                 }
 
-                ResumeVersionDetails(version: version)
+                // The resume itself, readable where it sits, as when it
+                // was chosen.
+                Section {
+                    FittedResumePage(context: version.context)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+
+                ResumeVersionDetails(version: version, isCompact: true)
 
                 Section {
                     Button("Delete Version", role: .destructive) { isConfirmingDeletion = true }

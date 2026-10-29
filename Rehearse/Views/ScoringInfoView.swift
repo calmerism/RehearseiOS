@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// What every score is based on, in one place: what the app listens to, how
-/// each of the six areas is marked, and what runs on the phone and what in
-/// the cloud. Opened from Your Score's toolbar and its Overall row, so the
-/// answer to "how is this scored?" is always one tap away.
+/// What every score is based on, in one place: what each band means, what
+/// the app listens to, how each of the six areas is marked, and what is and
+/// isn't kept. Opened from the info button beside the score and its Overall
+/// row, so the answer to "how is this scored?" is always one tap away.
 struct ScoringInfoView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -23,9 +23,19 @@ struct ScoringInfoView: View {
             }
 
             Section {
+                ForEach(Feedback.Band.allCases, id: \.self) { band in
+                    LabeledContent(band.title, value: "\(band.range.lowerBound)–\(band.range.upperBound)")
+                }
+            } header: {
+                Text("What Your Score Means")
+                    .listHeadingInset()
+            } footer: {
+                Text("Ending early takes 3 off for each question skipped.")
+            }
+
+            Section {
                 source("Your Words", detail: "What you said, from the transcript", systemImage: "text.bubble.fill")
                 source("Your Voice", detail: Scoring.flagsFillerWords ? "Pace, pauses and filler words" : "Pace and pauses", systemImage: "waveform")
-                source("Your Camera", detail: "Where you look while you answer", systemImage: "video.fill")
             } header: {
                 Text("What It’s Based On")
                     .listHeadingInset()
@@ -43,17 +53,17 @@ struct ScoringInfoView: View {
                 Text("The Six Areas")
                     .listHeadingInset()
             } footer: {
-                Text("Judged areas are marked by AI against a fixed checklist. Measured areas follow set rules, so the same answer always gets the same score.")
+                Text("Measured areas follow set rules from how you spoke, so the same answer always gets the same score. Judged areas are estimated from what you said.")
             }
 
             Section {
-                source("On Your iPhone", detail: "Camera, voice and the transcript", systemImage: "iphone")
-                source("Rehearse Cloud", detail: "Judging answers and writing resumes", systemImage: "cloud.fill")
+                source("On Your iPhone", detail: "Your speech is turned into text on your iPhone where it’s supported", systemImage: "iphone")
+                source("What’s Kept", detail: "The text of your answers and your scores", systemImage: "tray.full.fill")
             } header: {
-                Text("Where It Runs")
+                Text("Your Privacy")
                     .listHeadingInset()
             } footer: {
-                Text("Your video never leaves your phone. Ending early takes 3 off for each question skipped.")
+                Text("No audio or video is recorded. The camera isn’t used.")
             }
         }
         .appListStyle()

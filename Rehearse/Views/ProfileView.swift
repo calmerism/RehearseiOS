@@ -22,26 +22,13 @@ struct ProfileView: View {
             }
 
             Section {
-                NavigationLink(value: Route.progress) {
-                    Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
-                }
-            }
-
-            Section {
-                NavigationLink(value: Route.resume) {
-                    LabeledContent {
-                        Text(resumeStatus)
-                    } label: {
-                        Label("Resume", systemImage: "doc.text")
-                    }
-                }
                 LabeledContent {
                     Text(appState.experienceLevel)
                 } label: {
                     Label("Experience Level", systemImage: "graduationcap")
                 }
             } footer: {
-                Text("Questions are picked for your experience level and the projects on your resume.")
+                Text("Questions are picked for your experience level.")
             }
 
             Section {
@@ -91,7 +78,7 @@ struct ProfileView: View {
                     .frame(maxWidth: .infinity)
                     .disabled(isDeleting)
                 } footer: {
-                    Text("Deletes your account and everything in it: interviews, scores, resumes and playlists. This can’t be undone.")
+                    Text("Deletes your account and everything in it: interviews, scores, resumes and collections. This can’t be undone.")
                 }
             }
 
@@ -128,7 +115,7 @@ struct ProfileView: View {
                 }
             }
         } message: {
-            Text("Your interviews, scores, resumes and playlists will be deleted for good.")
+            Text("Your interviews, scores, resumes and collections will be deleted for good.")
         }
         .alert("Notifications Are Off", isPresented: $notificationsBlocked) {
             Button("Open Settings") { openURL(URL(string: UIApplication.openSettingsURLString)!) }
@@ -173,15 +160,6 @@ struct ProfileView: View {
         }
         .padding(.vertical, AppTheme.Spacing.xxs)
         .accessibilityElement(children: .combine)
-    }
-
-    private var resumeStatus: String {
-        switch appState.resume {
-        case .none: "Not added"
-        case .parsing: "Reading…"
-        case .ready: "Added"
-        case .failed: "Couldn’t read"
-        }
     }
 }
 

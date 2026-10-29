@@ -18,6 +18,11 @@ enum InterviewReminders {
         }
     }
 
+    /// What iOS says about notifications for Rehearse, without asking.
+    static func authorizationStatus() async -> UNAuthorizationStatus {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+    }
+
     /// Replaces every scheduled reminder with ones for `interviews`, or
     /// clears them when reminders are off.
     static func update(for interviews: [Interview], on: Bool) async {

@@ -30,18 +30,21 @@ struct UpcomingInterviewEditor: View {
             Form {
                 if isNew {
                     Section {
-                        LabeledTextField(title: "Company", text: company, prompt: "Required", contentType: .organizationName)
-                        LabeledTextField(title: "Role", text: $draft.role, prompt: "Required", contentType: .jobTitle)
+                        LabeledTextField(title: "Company Name", text: company, prompt: "Enter company name", contentType: .organizationName)
+                        LabeledTextField(title: "Role", text: $draft.role, prompt: "Enter job role", contentType: .jobTitle)
                     }
 
                     Section {
-                        Picker("Interview Type", selection: $draft.type) {
-                            ForEach(InterviewType.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(InterviewType.allCases) { option in
+                            InterviewTypeRow(type: option, isSelected: draft.type == option) { draft.type = option }
                         }
+                    } header: {
+                        Text("Interview Type")
+                            .listHeadingInset()
                     }
                 } else {
                     Section {
-                        LabeledContent("Company", value: draft.company ?? "")
+                        LabeledContent("Company Name", value: draft.company ?? "")
                         LabeledContent("Role", value: draft.role)
                         LabeledContent("Interview Type", value: draft.type.rawValue)
                     } footer: {

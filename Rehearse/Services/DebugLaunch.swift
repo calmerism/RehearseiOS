@@ -20,11 +20,9 @@ extension AppState {
         // Screenshots of any screen but the login start signed in.
         if arguments.contains("-signedIn") || arguments.contains("-demoTabs") || arguments.contains("-demoSwipe") {
             isSignedIn = true
-            hasSeenWelcome = true
         }
         guard let index = arguments.firstIndex(of: "-screen"), arguments.indices.contains(index + 1) else { return }
         let screen = arguments[index + 1]
-        hasSeenWelcome = screen != "welcome"
         isSignedIn = !["login", "welcome"].contains(screen)
         if screen == "setup" {
             load(.newUser)
@@ -42,12 +40,13 @@ extension AppState {
         switch arguments[index + 1] {
         case "setup-upcoming": if let next = nextInterview { setUpInterview(.upcoming(next.id)) }
         case "setup-custom": setUpInterview(.custom)
-        case "resume": path = [.profile, .resume]
+        case "resume": selectedTab = .resume
         case "resume-parsing":
-            path = [.profile, .resume]
+            selectedTab = .resume
             Task { await uploadResume(named: MockData.resumeFileName) }
         case "resume-version":
-            if let first = tailoredResumes.first { path = [.profile, .resume, .resumeVersion(first.id)] }
+            selectedTab = .resume
+            if let first = tailoredResumes.first { resumePath = [.resumeVersion(first.id)] }
         case "library": selectedTab = .questions
         case "library-focus": path = [.library(focus: .answerStructure)]
         case "question": path = [.question(library[1])]
@@ -59,7 +58,8 @@ extension AppState {
         case "see-all": path = [.history]
         case "profile": path = [.profile]
         case "upcoming": path = [.upcoming]
-        case "progress": path = [.profile, .progress]
+        case "progress":
+            selectedTab = .progress
         case "detail": path = [.rehearsal(rehearsals[1].id)]
         case "detail-low": if let first = interviews.last { path = [.rehearsal(first.id)] }
         case "answer":

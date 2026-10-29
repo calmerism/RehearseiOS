@@ -1,12 +1,11 @@
 import SwiftUI
 
 /// Every practice question, under the candidate's collections: Saved
-/// and their own playlists, as Music's library puts playlists above
+/// and their own collections, as Music's library puts playlists above
 /// songs. Narrowed to one skill when the candidate arrives from feedback
 /// looking for questions that build it; the collections step aside then.
 struct QuestionLibraryView: View {
     @Environment(AppState.self) private var appState
-    @State private var searchText = ""
     @State private var category: QuestionCategory?
     @State private var focus: Skill?
     @State private var difficulty: Difficulty?
@@ -24,17 +23,12 @@ struct QuestionLibraryView: View {
     }
 
     var body: some View {
-        let visibleQuestions = appState.questions(category: category, difficulty: difficulty, skill: focus, area: area, matching: searchText)
+        // No search here; each collection searches its own questions.
+        let visibleQuestions = appState.questions(category: category, difficulty: difficulty, skill: focus, area: area, matching: "")
         List {
             TabHeaderSection()
 
-            Section {
-                SearchField(prompt: "Search questions", text: $searchText)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-            }
-
-            if searchText.isEmpty && focus == nil {
+            if focus == nil {
                 collections
             }
 
@@ -64,7 +58,6 @@ struct QuestionLibraryView: View {
                     Text("Nothing matches. Try a different filter.")
                 } actions: {
                     Button("Show All Questions") {
-                        searchText = ""
                         category = nil
                         difficulty = nil
                         area = nil
@@ -133,9 +126,7 @@ struct QuestionLibraryView: View {
             }
             .accessibilityLabel("Filter questions")
         }
-        .scrollDismissesKeyboard(.immediately)
         // A new filter starts from the top again.
-        .onChange(of: searchText) { shownCount = Self.pageSize }
         .onChange(of: category) { shownCount = Self.pageSize }
         .onChange(of: difficulty) { shownCount = Self.pageSize }
         .onChange(of: area) { shownCount = Self.pageSize }
@@ -143,8 +134,9 @@ struct QuestionLibraryView: View {
         .playlistNaming($naming)
     }
 
-    /// Saved, then the candidate's playlists and a way to
-    /// start one, as Music lists playlists.
+    /// Saved, then the candidate's own collections and a way to start one,
+    /// as Music lists playlists. Every row is the same height, with the same
+    /// square artwork, so the list lines up.
     private var collections: some View {
         Section {
             NavigationLink(value: Route.collection(.saved)) {
@@ -163,9 +155,15 @@ struct QuestionLibraryView: View {
                     Button("Rename", systemImage: "pencil") {
                         naming = PlaylistNameRequest(playlistID: playlist.id, name: playlist.name)
                     }
-                    Button("Delete Playlist", systemImage: "trash", role: .destructive) {
+                    Button("Delete Collection", systemImage: "trash", role: .destructive) {
                         withAnimation { appState.deletePlaylist(id: playlist.id) }
                     }
+                }
+                .swipeActions(edge: .leading) {
+                    Button("Rename", systemImage: "pencil") {
+                        naming = PlaylistNameRequest(playlistID: playlist.id, name: playlist.name)
+                    }
+                    .tint(AppTheme.graphic)
                 }
             }
             Button {
@@ -177,13 +175,17 @@ struct QuestionLibraryView: View {
                         .foregroundStyle(AppTheme.brand)
                         .frame(width: 48, height: 48)
                         .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: 48 * 0.2, style: .continuous))
-                    Text("New Playlist")
+                    Text("New Collection")
+                        .font(.rowTitle)
                         .foregroundStyle(AppTheme.brand)
                 }
             }
+            .accessibilityHint("Creates a collection of questions")
         } header: {
-            Text("Collections")
+            Text("Your Collections")
                 .listHeadingInset()
+        } footer: {
+            Text("Swipe a collection to rename or delete it. Touch and hold any question to add it to one.")
         }
     }
 }
@@ -204,6 +206,13 @@ struct QuestionDetailView: View {
             Section {
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
                     VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                        // Practiced comes first, plainly, as on Home's
+                        // upcoming card; when is in the History.
+                        if !appState.practiceHistory(for: question).isEmpty {
+                            Label("Practiced", systemImage: "checkmark.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppTheme.practiced)
+                        }
                         Text(question.metaText)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -258,13 +267,6 @@ struct QuestionDetailView: View {
                 .listHeadingInset()
             }
 
-            let history = appState.practiceHistory(for: question)
-            if let latest = history.first {
-                Section {
-                    PracticedLabel(text: "Practiced \(latest.date.formatted(.relative(presentation: .named)))")
-                }
-            }
-
             let similar = appState.library.filter { $0.category == question.category && $0.id != question.id }.prefix(3)
             if !similar.isEmpty {
                 Section {
@@ -284,18 +286,20 @@ struct QuestionDetailView: View {
         .scrollingTitle("Question")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            // One way to keep a question: the bookmark, which saves it or
+            // adds it to a collection. (A separate ⋯ menu did the same.)
+            ToolbarItem(placement: .topBarTrailing) {
                 let isSaved = appState.isSaved(question)
-                Button(isSaved ? "Unsave" : "Save", systemImage: isSaved ? "bookmark.fill" : "bookmark") {
-                    appState.toggleSaved(question)
-                }
-                .sensoryFeedback(.selection, trigger: isSaved)
                 Menu {
+                    Button(isSaved ? "Remove from Saved" : "Save", systemImage: isSaved ? "bookmark.slash" : "bookmark") {
+                        appState.toggleSaved(question)
+                    }
                     AddToPlaylistMenu(question: question, naming: $naming)
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
                 }
-                .accessibilityLabel("More")
+                .accessibilityLabel(isSaved ? "Saved" : "Save")
+                .sensoryFeedback(.selection, trigger: isSaved)
             }
         }
         .playlistNaming($naming)
